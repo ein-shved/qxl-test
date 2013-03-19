@@ -1,11 +1,18 @@
-#include "test_device.h"
+#include <stdio.h>
+#include <stddef.h>
 
-#define dprint(qxl, lvl, fmt, ...) printf(fmt, __VA_ARGS__)
-#define __FUNCTION__ ""
+#include "test_qxl_device.h"
+
+//FIXME reuse from other source (no copy-paste)
+#ifndef container_of
+#define container_of(ptr, type, member) \
+    (type *)((char *)(ptr) - offsetof(type, member))
+#endif //container_of
 
 static void test_interface_attache_worker (QXLInstance *sin, QXLWorker *qxl_worker)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+
 
     //TODO learn for what next line?
     //qxl_worker->add_memslot(qxl_worker, &my_slot);
@@ -77,6 +84,16 @@ static int test_interface_get_cursor_command(QXLInstance *sin, struct QXLCommand
 
     return 0;
 }
+static int test_interface_req_cursor_notification(QXLInstance *sin)
+{
+    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+
+    dprint(qxl, 1, "%s:\n", __FUNCTION__);
+ 
+    //FIXME implemet
+
+    return 0;
+}
 static void test_interface_notify_update(QXLInstance *sin, uint32_t update_id)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
@@ -86,7 +103,7 @@ static void test_interface_notify_update(QXLInstance *sin, uint32_t update_id)
     //FIXME implemet
 
 }
-static int interface_flush_resources(QXLInstance *sin)
+static int test_interface_flush_resources(QXLInstance *sin)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
