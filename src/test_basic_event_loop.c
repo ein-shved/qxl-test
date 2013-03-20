@@ -10,17 +10,8 @@
 #include "test_basic_event_loop.h"
 #include "test_qxl_device.h"
 
-int debug = 0;
-
-#undef DPRINTF
-#ifdef DEBUG
-#   define DPRINTF(format, ...) \
-        printf("%s: " format "\n" , __FUNCTION__, ## __VA_ARGS__); 
-#else
-#   define DPRINTF(format, ...)
-#endif //DEBUG
-
-#define NOT_IMPLEMENTED printf("%s not implemented\n", __func__);
+#define DPRINTF(fmt, ...) \
+    dprint (2, "%s: " fmt "\n", __func__, ## __VA_ARGS__)
 
 static SpiceCoreInterface core;
 
@@ -33,32 +24,27 @@ typedef struct Ring {
 
 static inline void ring_init(Ring *ring)
 {
-    DPRINTF("");
     ring->next = ring->prev = ring;
 }
 
 static inline void ring_item_init(RingItem *item)
 {
-    DPRINTF("");
     item->next = item->prev = NULL;
 }
 
 static inline int ring_item_is_linked(RingItem *item)
 {
-    DPRINTF("");
     return !!item->next;
 }
 
 static inline int ring_is_empty(Ring *ring)
 {
-    DPRINTF("");
     assert(ring->next != NULL && ring->prev != NULL);
     return ring == ring->next;
 }
 
 static inline void ring_add(Ring *ring, RingItem *item)
 {
-    DPRINTF("");
     assert(ring->next != NULL && ring->prev != NULL);
     assert(item->next == NULL && item->prev == NULL);
 
@@ -69,7 +55,6 @@ static inline void ring_add(Ring *ring, RingItem *item)
 
 static inline void __ring_remove(RingItem *item)
 {
-    DPRINTF("");
     item->next->prev = item->prev;
     item->prev->next = item->next;
     item->prev = item->next = 0;
@@ -77,7 +62,6 @@ static inline void __ring_remove(RingItem *item)
 
 static inline void ring_remove(RingItem *item)
 {
-    DPRINTF("");
     assert(item->next != NULL && item->prev != NULL);
     assert(item->next != item);
 
@@ -86,7 +70,6 @@ static inline void ring_remove(RingItem *item)
 
 static inline RingItem *ring_get_head(Ring *ring)
 {
-    DPRINTF("");
     RingItem *ret;
 
     assert(ring->next != NULL && ring->prev != NULL);
@@ -100,7 +83,6 @@ static inline RingItem *ring_get_head(Ring *ring)
 
 static inline RingItem *ring_get_tail(Ring *ring)
 {
-    DPRINTF("");
     RingItem *ret;
 
     assert(ring->next != NULL && ring->prev != NULL);
@@ -114,7 +96,6 @@ static inline RingItem *ring_get_tail(Ring *ring)
 
 static inline RingItem *ring_next(Ring *ring, RingItem *pos)
 {
-    DPRINTF("");
     RingItem *ret;
 
     assert(ring->next != NULL && ring->prev != NULL);
@@ -126,7 +107,6 @@ static inline RingItem *ring_next(Ring *ring, RingItem *pos)
 
 static inline RingItem *ring_prev(Ring *ring, RingItem *pos)
 {
-    DPRINTF("");
     RingItem *ret;
 
     assert(ring->next != NULL && ring->prev != NULL);
@@ -157,7 +137,6 @@ Ring timers;
 
 static SpiceTimer* timer_add(SpiceTimerFunc func, void *opaque)
 {
-    DPRINTF("");
     SpiceTimer *timer = calloc(sizeof(SpiceTimer), 1);
 
     timer->func = func;
@@ -168,7 +147,6 @@ static SpiceTimer* timer_add(SpiceTimerFunc func, void *opaque)
 
 static void add_ms_to_timeval(struct timeval *tv, int ms)
 {
-    DPRINTF("");
     tv->tv_usec += 1000 * ms;
     while (tv->tv_usec >= 1000000) {
         tv->tv_sec++;
@@ -178,7 +156,6 @@ static void add_ms_to_timeval(struct timeval *tv, int ms)
 
 static void timer_start(SpiceTimer *timer, uint32_t ms)
 {
-    DPRINTF("");
     //ASSERT(ms);
     gettimeofday(&timer->tv_start, NULL);
     timer->ms = ms;
@@ -193,7 +170,6 @@ static void timer_cancel(SpiceTimer *timer)
 
 static void timer_remove(SpiceTimer *timer)
 {
-    DPRINTF("");
     ring_remove(&timer->link);
 }
 
@@ -248,7 +224,6 @@ static void channel_event(int event, SpiceChannelEventInfo *info)
 
 SpiceTimer *get_next_timer(void)
 {
-    DPRINTF("");
     SpiceTimer *next, *min;
 
     if (ring_is_empty(&timers)) {
@@ -285,14 +260,12 @@ void tv_b_minus_a_return_le_zero(struct timeval *a, struct timeval *b, struct ti
 
 void calc_next_timeout(SpiceTimer *next, struct timeval *timeout)
 {
-    DPRINTF("");
     gettimeofday(&now, NULL);
     tv_b_minus_a_return_le_zero(&now, &next->tv_start, timeout);
 }
 
 void timeout_timers(void)
 {
-    DPRINTF("");
     SpiceTimer *next;
     struct timeval left;
     int count = 0;
@@ -313,7 +286,6 @@ void timeout_timers(void)
 
 void basic_event_loop_mainloop(void)
 {
-    DPRINTF("");
     fd_set rfds, wfds;
     int max_fd = -1;
     int i;
