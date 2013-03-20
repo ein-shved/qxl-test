@@ -2,16 +2,18 @@ cmake_minimum_required (VERSION 2.6)
 project (qxl-test)
 
 # The version number.
-set (QXL_TEST_VERSION_MAJOR 0)
-set (QXL_TEST_VERSION_MINOR 0)
+set (TEST_QXL_VERSION_MAJOR 0)
+set (TEST_QXL_VERSION_MINOR 0)
 
+set (CURRENT_DIR "/home/shved/Projects/Spice/qxl-test")
 set (PREFIX "/home/shved/Projects/Spice/install")
+set (PROJECT_BINARY_DIR "${CURRENT_DIR}/bin")
 
 # configure a header file to pass some of the CMake settings
 # to the source code
 configure_file (
-  "${PROJECT_SOURCE_DIR}/qxl_test_config.h.in"
-  "${PROJECT_BINARY_DIR}/qxl_test_config.h"
+  "${PROJECT_SOURCE_DIR}/test_qxl_config.h.in"
+  "${PROJECT_SOURCE_DIR}/test_qxl_config.h"
   )
 
 # add the binary tree to the search path for include files
@@ -32,7 +34,7 @@ link_directories (
 add_executable ( test_qxl 
                  test_qxl_device.c 
                  test_qxl_interface.c
-                 basic_event_loop.c
+                 test_basic_event_loop.c
                )
 set (SPICE_SERVER_LIB "spice-server")
 

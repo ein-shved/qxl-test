@@ -1,9 +1,10 @@
 #ifndef TEST_QXL_DEVICE_H
 #define TEST_QXL_DEVICE_H
 
+#define DEBUG
+
 #include <spice.h>
-//#include <qxl.h>
-//#include <spiceqxl_spice_server.h>
+#include <stdio.h>
 
 #ifndef BOOL
 #   define BOOL int

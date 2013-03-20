@@ -9,13 +9,36 @@
     (type *)((char *)(ptr) - offsetof(type, member))
 #endif //container_of
 
+
+#define NUM_MEMSLOTS 1
+#define NUM_MEMSLOTS_GROUPS 1
+#define NUM_SURFACES 128
+#define MEMSLOT_ID_BITS 1
+#define MEMSLOT_GEN_BITS 1
+
+#define MEMSLOT_GROUP 0
+
+//Not actually need.
+QXLDevMemSlot slot = {
+.slot_group_id = MEMSLOT_GROUP,
+.slot_id = 0,
+.generation = 0,
+.virt_start = 0,
+.virt_end = ~0,
+.addr_delta = 0,
+.qxl_ram_size = ~0, //TODO: learn what this: ~
+};
+
 static void test_interface_attache_worker (QXLInstance *sin, QXLWorker *qxl_worker)
 {
+    static int count = 0;
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
-
-    //TODO learn for what next line?
-    //qxl_worker->add_memslot(qxl_worker, &my_slot);
+    if (++count > 1) { //Only one worker per session
+        dprint(qxl, 1, "%s: ignored\n", __FUNCTION__);
+        return;
+    }
+    qxl_worker->add_memslot(qxl_worker, &slot);
 
     dprint(qxl, 1, "%s:\n", __FUNCTION__);
     qxl->worker = qxl_worker;
@@ -33,7 +56,7 @@ static void test_interface_set_mm_time(QXLInstance *sin, uint32_t mm_time)
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(qxl, 1, "%s:\n", __FUNCTION__);
- 
+
     //FIXME implement 
 }
 static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
@@ -42,6 +65,12 @@ static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 
     dprint(qxl, 1, "%s:\n", __FUNCTION__);
     
+    info->num_memslots = NUM_MEMSLOTS;
+    info->num_memslots_groups = NUM_MEMSLOTS_GROUPS;
+    info->memslot_id_bits = MEMSLOT_ID_BITS;
+    info->memslot_gen_bits = MEMSLOT_GEN_BITS;
+    info->n_surfaces = NUM_SURFACES;
+
     //FIXME implement
 }
 static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ext)
@@ -50,9 +79,9 @@ static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ex
 
     dprint(qxl, 1, "%s:\n", __FUNCTION__);
  
-    //FIXME implemet
+    //FIXME implemet (make command ring)
 
-    return 0;
+    return FALSE;
 }
 static int test_interface_req_cmd_notification(QXLInstance *sin)
 {
@@ -137,5 +166,7 @@ static QXLInterface test_qxl_interface = {
 
 QXLInterface *test_init_qxl (void)
 {
+    printf ("%s\n", __FUNCTION__);
+
     return &test_qxl_interface;
 }
