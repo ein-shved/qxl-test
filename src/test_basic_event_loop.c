@@ -1,4 +1,3 @@
-//#include <config.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
@@ -9,121 +8,12 @@
 #include <spice/macros.h>
 #include "test_basic_event_loop.h"
 #include "test_qxl_device.h"
+#include "common/ring.h"
 
 #define DPRINTF(fmt, ...) \
-    dprint (2, "%s: " fmt "\n", __func__, ## __VA_ARGS__)
+    dprint (3, "%s: " fmt "\n", __func__, ## __VA_ARGS__)
 
 static SpiceCoreInterface core;
-
-/* From ring.h */
-typedef struct Ring RingItem;
-typedef struct Ring {
-    RingItem *prev;
-    RingItem *next;
-} Ring;
-
-static inline void ring_init(Ring *ring)
-{
-    ring->next = ring->prev = ring;
-}
-
-static inline void ring_item_init(RingItem *item)
-{
-    item->next = item->prev = NULL;
-}
-
-static inline int ring_item_is_linked(RingItem *item)
-{
-    return !!item->next;
-}
-
-static inline int ring_is_empty(Ring *ring)
-{
-    assert(ring->next != NULL && ring->prev != NULL);
-    return ring == ring->next;
-}
-
-static inline void ring_add(Ring *ring, RingItem *item)
-{
-    assert(ring->next != NULL && ring->prev != NULL);
-    assert(item->next == NULL && item->prev == NULL);
-
-    item->next = ring->next;
-    item->prev = ring;
-    ring->next = item->next->prev = item;
-}
-
-static inline void __ring_remove(RingItem *item)
-{
-    item->next->prev = item->prev;
-    item->prev->next = item->next;
-    item->prev = item->next = 0;
-}
-
-static inline void ring_remove(RingItem *item)
-{
-    assert(item->next != NULL && item->prev != NULL);
-    assert(item->next != item);
-
-    __ring_remove(item);
-}
-
-static inline RingItem *ring_get_head(Ring *ring)
-{
-    RingItem *ret;
-
-    assert(ring->next != NULL && ring->prev != NULL);
-
-    if (ring_is_empty(ring)) {
-        return NULL;
-    }
-    ret = ring->next;
-    return ret;
-}
-
-static inline RingItem *ring_get_tail(Ring *ring)
-{
-    RingItem *ret;
-
-    assert(ring->next != NULL && ring->prev != NULL);
-
-    if (ring_is_empty(ring)) {
-        return NULL;
-    }
-    ret = ring->prev;
-    return ret;
-}
-
-static inline RingItem *ring_next(Ring *ring, RingItem *pos)
-{
-    RingItem *ret;
-
-    assert(ring->next != NULL && ring->prev != NULL);
-    assert(pos);
-    assert(pos->next != NULL && pos->prev != NULL);
-    ret = pos->next;
-    return (ret == ring) ? NULL : ret;
-}
-
-static inline RingItem *ring_prev(Ring *ring, RingItem *pos)
-{
-    RingItem *ret;
-
-    assert(ring->next != NULL && ring->prev != NULL);
-    assert(pos);
-    assert(pos->next != NULL && pos->prev != NULL);
-    ret = pos->prev;
-    return (ret == ring) ? NULL : ret;
-}
-
-#define RING_FOREACH_SAFE(var, next, ring)                    \
-    for ((var) = ring_get_head(ring),                         \
-         (next) = (var) ? ring_next(ring, (var)) : NULL;      \
-            (var);                                            \
-            (var) = (next),                                   \
-            (next) = (var) ? ring_next(ring, (var)) : NULL)
-
-
 
 typedef struct SpiceTimer {
     RingItem link;

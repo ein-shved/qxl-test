@@ -5,26 +5,29 @@
 
 #include "test_qxl_device.h"
 #include "test_basic_event_loop.h"
+#include "test_display_base.h"
 
 static void do_wakeup (void *opaque)
 {
-    dprint (1, "%s:", __func__);
 
     test_qxl_t *qxl = opaque;
-
     qxl->produce_command(qxl);
+    qxl->core->timer_start (qxl->wakeup_timer, 10);
 }
 
 static test_qxl_t *new_test ( SpiceCoreInterface *core)
 {
     static int qxl_count = 0;
-    assert (++qxl_count<=1);
+    SpiceTimer* wakeup_timer;
     static test_qxl_t _qxl;
     test_qxl_t *qxl = &_qxl;
 
+    assert (++qxl_count<=1);
+
     qxl->core = core;
 
-    qxl->wakeup_timer = core->timer_add(do_wakeup, qxl);
+    wakeup_timer = core->timer_add(do_wakeup, qxl);
+    qxl->wakeup_timer=wakeup_timer;
     
     return qxl;
 }
@@ -61,7 +64,6 @@ static void test_qxl_spice_server_new ( test_qxl_t *qxl,
 
 static void test_qxl_spice_server_init ( test_qxl_t *qxl )
 {
-    test_init_qxl_interface(qxl);
 
     spice_server_add_interface (qxl->spice_server, &qxl->display_sin.base);
 
@@ -84,6 +86,8 @@ int main (int argc, const char *argv[])
 
     core = basic_event_loop_init();
     qxl = new_test (core);
+    test_qxl_display_init(qxl);
+    test_init_qxl_interface(qxl);
     test_qxl_spice_server_new(qxl, &ops);
     test_qxl_spice_server_init(qxl);
 
@@ -92,6 +96,7 @@ int main (int argc, const char *argv[])
     dprint (3, "%s: worker launched\n", __func__);
     qxl->worker_running = TRUE;
 
+    qxl->core->timer_start (qxl->wakeup_timer, 10);
     basic_event_loop_mainloop();
 }
 

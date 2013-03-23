@@ -9,6 +9,9 @@ set (CURRENT_DIR "/home/shved/Projects/Spice/qxl-test")
 set (PREFIX "/home/shved/Projects/Spice/install")
 set (PROJECT_BINARY_DIR "${CURRENT_DIR}/bin")
 
+set (LIBRARY_OUTPUT_PATH "${CURRENT_DIR}/obj")
+set (EXECUTABLE_OUTPUT_PATH "${CURRENT_DIR}/bin")
+
 # configure a header file to pass some of the CMake settings
 # to the source code
 configure_file (
@@ -35,6 +38,7 @@ add_executable ( test_qxl
                  test_qxl_device.c 
                  test_qxl_interface.c
                  test_basic_event_loop.c
+                 test_display_base.c
                )
 set (SPICE_SERVER_LIB "spice-server")
 

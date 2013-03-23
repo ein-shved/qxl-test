@@ -1,84 +1,11 @@
 #include <stdio.h>
 #include <stddef.h>
-
+#include <stdlib.h>
+#include <string.h>
 
 #include "test_qxl_device.h"
-
-//FIXME reuse from other source (no copy-paste)
-#ifndef container_of
-#define container_of(ptr, type, member) \
-    (type *)((char *)(ptr) - offsetof(type, member))
-#endif //container_of
-
-
-#define NUM_MEMSLOTS        1
-#define NUM_MEMSLOTS_GROUPS 1
-#define NUM_SURFACES        128
-#define MEMSLOT_ID_BITS     1
-#define MEMSLOT_GEN_BITS    1
-
-#define DEFAULT_WIDTH   256
-#define DEFAULT_HEIGHT  256
-
-#define MEMSLOT_GROUP 0
-
-#define NUM_MAX_COMMANDS 1024
-
-static struct {
-    TestCommand ring [NUM_MAX_COMMANDS];
-    int start;
-    int end;
-} commands = {
-    .start = 0,
-    .end = 0,
-};
-
-#define ASSERT_COMMANDS assert (\
-    commands.end - commands.start < NUM_MAX_COMMANDS &&\
-    commands.end > commands.start );
-
-static void add_command (const TestCommand *command)
-{
-    ++commands.end;
-    ASSERT_COMMANDS;
-    commands.ring[commands.end % NUM_MAX_COMMANDS] = *command;
-}
-static const TestCommand * get_command (int cmd_index)
-{
-    int cmd_num = commands.start + cmd_index;
-    assert (cmd_num < commands.end);
-    return commands.ring + (cmd_num) % NUM_MAX_COMMANDS;
-}
-
-//from server/tests/test_display_base.c
-static void create_primary_surface( test_qxl_t* qxl,
-                                    uint32_t width, uint32_t height )
-{
-    QXLWorker *qxl_worker = qxl->worker;
-    QXLDevSurfaceCreate surface = { 0, };
-
-    ASSERT(height <= MAX_HEIGHT);
-    ASSERT(width <= MAX_WIDTH);
-    ASSERT(height > 0);
-    ASSERT(width > 0);
-
-    surface.format     = SPICE_SURFACE_FMT_32_xRGB;
-    surface.width      = qxl->primary_width = width;
-    surface.height     = qxl->primary_height = height;
-    surface.stride     = -width * 4; /* negative? */
-    surface.mouse_mode = FALSE; /* unused by red_worker */
-    surface.flags      = 0;
-    surface.type       = 0;    /* unused by red_worker */
-    surface.position   = 0;    /* unused by red_worker */
-    surface.mem        = (uint64_t)&qxl->primary_surface;
-    surface.group_id   = MEMSLOT_GROUP;
-
-    //test->width = width;
-    //test->height = height;
-
-    qxl_worker->create_primary_surface(qxl_worker, 0, &surface);
-}
-
+#include "common/ring.h"
+#include "test_display_base.h"
 
 //Not actually need.
 QXLDevMemSlot slot = {
@@ -91,13 +18,51 @@ QXLDevMemSlot slot = {
 .qxl_ram_size = ~0, //TODO: learn what this: ~
 };
 
+#define MAX_COMMAND_NUM 1024
+#define MAX_WAIT_ITERATIONS 10
+#define WAIT_ITERATION_TIME 1
+
+struct {
+    QXLCommandExt *vector [MAX_COMMAND_NUM];
+    int start;
+    int end;
+} commands = { 
+    .start = 0,
+    .end = 0,
+};
+
+#define ASSERT_COMMANDS assert (\
+    (commands.end - commands.start <= MAX_COMMAND_NUM) && \
+    (commands.end >= commands.start) )
+
+static int push_command (test_qxl_t *qxl, QXLCommandExt *cmd)
+{
+    int i = 0;
+    int count;
+
+    ASSERT_COMMANDS;
+    
+    while ( (count  = commands.end - commands.start) >= MAX_COMMAND_NUM) {
+        //may be decremented from worker thread.
+        if (i >= MAX_WAIT_ITERATIONS) {
+            dprint (2, "%s: command que is full\n", __func__);
+            return FALSE;
+        }
+        ++i;
+        sleep(WAIT_ITERATION_TIME);
+    }
+    commands.vector[commands.end % MAX_COMMAND_NUM] = cmd;
+    ++commands.end;
+    return TRUE;
+}
+
 static void test_interface_attache_worker (QXLInstance *sin, QXLWorker *qxl_worker)
 {
     static int count = 0;
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     if (++count > 1) { //Only one worker per session
-        dprint(2, "%s: ignored\n", __FUNCTION__);
+        dprint(1, "%s: ignored\n", __FUNCTION__);
         return;
     }
     qxl_worker->add_memslot(qxl_worker, &slot);
@@ -139,10 +104,21 @@ static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ext)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+    int count = commands.end - commands.start;
 
     dprint(3, "%s:\n", __FUNCTION__);
- 
-    //FIXME implemet (make command ring)
+    
+    if (count > 0) {
+        *ext = *commands.vector[commands.start];
+        ++commands.start;
+        free (commands.vector[commands.start - 1]);
+        if ( commands.start >= MAX_COMMAND_NUM ) {
+            commands.start %= MAX_COMMAND_NUM;
+            commands.end %= MAX_COMMAND_NUM;
+        }
+        ASSERT_COMMANDS;
+        return TRUE;
+    }
 
     return FALSE;
 }
@@ -227,29 +203,43 @@ static QXLInterface test_qxl_interface = {
 
 //TODO implement worker functions
 
-void produce_command (test_qxl_t *qxl)
+
+
+static void fill_commands()
 {
-    int num_commands = commands.end - commands.start;
-    const TestCommand *command;
+    TestCommand cmd;
 
-    dprint (1, "%s:", __func__);
+    QXLRect rect = {
+        .left = 0,
+        .right = 640,
+        .top = 0,
+        .bottom = 480,
+    };
+    
+    cmd.type = COMMAND_DESTROY_PRIMARY;
+    cmd.times = 1;
+    add_command(&cmd);
 
-    if (num_commands == 0) {
-        dprint (2, "%s: commands ring is empty", __func__);
-        return;
-    }
-    command = get_command (qxl->cmd_index); 
+    cmd.type = COMMAND_CREATE_PRIMARY;
+    cmd.times = 1;
+    cmd.create_primary.rect = rect;
+    add_command(&cmd);
 
-    switch (command->type) {
-    case COMMAND_SLEEP:
-        dprint (2, "%s: sleeping", __func__);
-        sleep (command->sleep.secs);
-        break;
-    case COMMAND_UPDATE:
-        break;
-    }
-    qxl->cmd_index = (qxl->cmd_index + 1) % num_commands;
+    rect.right = 320;
+    rect.bottom = 240;
+    cmd.type = COMMAND_CREATE_SURFACE;
+    cmd.create_surface.rect = rect;
+    cmd.times = 1;
+    add_command (&cmd);
 
+    cmd.type = COMMAND_UPDATE;
+    cmd.times = 1;
+    add_command (&cmd);
+
+    cmd.type = COMMAND_SLEEP;
+    cmd.sleep.secs = 1;
+    cmd.times = 0;
+    add_command(&cmd);
 }
 
 void test_init_qxl_interface (test_qxl_t *qxl)
@@ -257,7 +247,7 @@ void test_init_qxl_interface (test_qxl_t *qxl)
     qxl->display_sin.base.sif = &test_qxl_interface.base;
     qxl->display_sin.id = 0;
     qxl->display_sin.st = (struct QXLState*)qxl;
-    qxl->cmd_index = 0;
+    qxl->push_command = push_command;    
 
-    qxl->produce_command = produce_command;
+    fill_commands();
 }
