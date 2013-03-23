@@ -12,6 +12,7 @@ static void do_wakeup (void *opaque)
 
     test_qxl_t *qxl = opaque;
     qxl->produce_command(qxl);
+    qxl->worker->wakeup(qxl->worker);
     qxl->core->timer_start (qxl->wakeup_timer, 10);
 }
 

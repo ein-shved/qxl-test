@@ -89,6 +89,7 @@ static void test_interface_set_mm_time(QXLInstance *sin, uint32_t mm_time)
 }
 static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 {
+    memset (info,0,sizeof(*info));
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(2, "%s:\n", __FUNCTION__);
@@ -103,6 +104,7 @@ static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 }
 static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ext)
 {
+    memset (ext,0,sizeof(*ext));
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
     int count = commands.end - commands.start;
 
@@ -126,11 +128,11 @@ static int test_interface_req_cmd_notification(QXLInstance *sin)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
-    dprint(3, "%s:\n", __FUNCTION__);
+    dprint(2, "%s:\n", __FUNCTION__);
  
     //FIXME implemet
 
-    return 0;
+    return TRUE;
 }
 static void test_interface_release_resource(QXLInstance *sin,
                                        struct QXLReleaseInfoExt ext)
@@ -150,17 +152,17 @@ static int test_interface_get_cursor_command(QXLInstance *sin, struct QXLCommand
  
     //FIXME implemet
 
-    return 0;
+    return FALSE;
 }
 static int test_interface_req_cursor_notification(QXLInstance *sin)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
-    dprint(3, "%s:\n", __FUNCTION__);
+    dprint(2, "%s:\n", __FUNCTION__);
  
     //FIXME implemet
 
-    return 0;
+    return TRUE;
 }
 static void test_interface_notify_update(QXLInstance *sin, uint32_t update_id)
 {
