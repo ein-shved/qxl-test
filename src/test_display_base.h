@@ -10,5 +10,6 @@ void add_command (const TestCommand *command);
 void remove_command (TestCommandItem *item);
 void create_primary_surface ( test_qxl_t *qxl,
                               uint32_t width, uint32_t height );
+void free_commands ();
 
 #endif //TEST_DISPLAY_BASE_H

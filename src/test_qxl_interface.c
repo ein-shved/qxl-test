@@ -130,19 +130,25 @@ static int test_interface_req_cmd_notification(QXLInstance *sin)
 
     dprint(2, "%s:\n", __FUNCTION__);
  
-    //FIXME implemet
+    qxl->core->timer_start (qxl->wakeup_timer, 10);
 
+    /* This and req_cursor_notification needed for
+     * client showing
+     */
     return TRUE;
 }
 static void test_interface_release_resource(QXLInstance *sin,
-                                       struct QXLReleaseInfoExt ext)
+                                       struct QXLReleaseInfoExt info)
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
-
+    QXLCommandExt *ext;
+        
     dprint(3, "%s:\n", __FUNCTION__);
  
-    //FIXME implemet
+    assert (info.group_id == MEMSLOT_GROUP);
+    ext = (QXLCommandExt*)(unsigned long)info.info->id;
 
+    qxl->release_resource(qxl, ext);
 }
 static int test_interface_get_cursor_command(QXLInstance *sin, struct QXLCommandExt *ext)
 {
@@ -162,6 +168,9 @@ static int test_interface_req_cursor_notification(QXLInstance *sin)
  
     //FIXME implemet
 
+    /* This and req_cmd_notification needed for
+     * client showing
+     */
     return TRUE;
 }
 static void test_interface_notify_update(QXLInstance *sin, uint32_t update_id)

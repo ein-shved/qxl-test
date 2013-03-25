@@ -97,7 +97,7 @@ int main (int argc, const char *argv[])
     dprint (3, "%s: worker launched\n", __func__);
     qxl->worker_running = TRUE;
 
-    qxl->core->timer_start (qxl->wakeup_timer, 10);
     basic_event_loop_mainloop();
+    free_commands();
 }
 

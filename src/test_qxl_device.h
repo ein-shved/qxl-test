@@ -62,6 +62,7 @@ typedef enum TestCommandType {
     COMMAND_DESTROY_SURFACE,
     COMMAND_CREATE_PRIMARY,
     COMMAND_DESTROY_PRIMARY,
+    COMMAND_DRAW,
 } TestCommandType;
 typedef struct TestCommandSleep {
     uint32_t secs;
@@ -73,6 +74,20 @@ typedef struct TestCommandCreateSurface {
 } TestCommandCreateSurface;
 typedef struct TestCommandDestroySurface {
 } TestCommandDestroySurface;
+typedef struct TestCommandDraw {
+    enum {
+        COMMAND_DRAW_FROM_BITMAP,
+        COMMAND_DRAW_SIMPLE,
+    } type;
+    QXLRect rect;
+    union {
+        uint32_t color;
+        struct TestBitmap {
+            uint8_t *ptr;
+            int destroyable;
+        } bitmap;
+    };
+};
 
 typedef struct TestCommand {
     TestCommandType type;
@@ -83,6 +98,7 @@ typedef struct TestCommand {
         TestCommandUpdate update;
         TestCommandCreateSurface create_surface;
         TestCommandCreateSurface create_primary;
+        TestCommandDraw draw;
     };
 } TestCommand;
 
@@ -103,6 +119,7 @@ struct _test_qxl_t {
 
     void (*produce_command) (struct _test_qxl_t*);
     int (*push_command) (struct _test_qxl_t*, QXLCommandExt *);
+    void (*release_resource) (struct _test_qxl_t*, QXLCommandExt *);
 
     RingItem *current_command;
 

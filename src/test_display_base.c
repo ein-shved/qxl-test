@@ -11,6 +11,12 @@ typedef struct TestSurfaceCmd {
     QXLCommandExt ext; // first
     QXLSurfaceCmd surface_cmd;
 } TestSurfaceCmd;
+typedef struct TestSpiceUpdate {
+    QXLCommandExt ext; //first
+    QXLDrawable drawable;
+    QXLImage image;
+    TestBitmap bitmap;
+} TestSpiceUpdate;
 
 typedef struct TestCommandItem {
     RingItem link;
@@ -27,11 +33,23 @@ static void set_cmd(QXLCommandExt *ext, uint32_t type, QXLPHYSICAL data)
     ext->group_id = MEMSLOT_GROUP;
     ext->flags = 0;
 }
-static void set_release_info(QXLReleaseInfo *info, intptr_t ptr)
+static void test_set_release_info(QXLReleaseInfo *info, intptr_t ptr)
 {
     info->id = ptr;
     //info->group_id = MEMSLOT_GROUP;
 }
+static void release_resource (test_qxl_t *qxl, QXLCommandExt *ext)
+{
+    switch (ext->cmd.type) {
+    case QXL_CMD_SURFACE: {
+        TestSurfaceCmd *cmd = container_of (ext, TestSurfaceCmd, ext);
+        free (cmd); //Can do free(ext);
+        break;
+    }
+        
+    }
+}
+
 static TestSurfaceCmd *create_surface(int surface_id, 
         const QXLRect *rect, uint8_t *data)
 {
@@ -45,7 +63,7 @@ static TestSurfaceCmd *create_surface(int surface_id,
     //Set the QXLCommandExt's type tp QXL_CMD_SURFACE and data
     //to surface_cmd.
     set_cmd(&simple_cmd->ext, QXL_CMD_SURFACE, (intptr_t)surface_cmd);
-    set_release_info(&surface_cmd->release_info, (intptr_t)simple_cmd);
+    test_set_release_info(&surface_cmd->release_info, (intptr_t)simple_cmd);
     surface_cmd->type = QXL_SURFACE_CMD_CREATE;
     surface_cmd->flags = 0; // ?
     surface_cmd->surface_id = surface_id;
@@ -63,11 +81,51 @@ static TestSurfaceCmd *destroy_surface(int surface_id)
     QXLSurfaceCmd *surface_cmd = &simple_cmd->surface_cmd;
 
     set_cmd(&simple_cmd->ext, QXL_CMD_SURFACE, (intptr_t)surface_cmd);
-    set_release_info(&surface_cmd->release_info, (intptr_t)simple_cmd);
+    test_set_release_info(&surface_cmd->release_info, (intptr_t)simple_cmd);
     surface_cmd->type = QXL_SURFACE_CMD_DESTROY;
     surface_cmd->flags = 0; // ?
     surface_cmd->surface_id = surface_id;
     return simple_cmd;
+}
+
+static TestSpiceUpdate *test_create_update_draw (test_qxl_t *qxl, 
+                TestBitmap *bitmap, const QXLRect *bbox
+                /*,int num_clip_rects, QXLRect* clip_rects */)
+{
+    static int image_unique = 1;
+    TestSpiceUpdate *update;
+    QXLImage *image;
+    QXLDrawable *drawable;
+    uint32_t bw, bh;
+
+    bw = bbox->right - bbox->left;
+    bh = bbox->bottom - bbox->top;
+
+    update = calloc (sizeof(*update), 1);
+    update->bitmap = *bitmap;
+    drawable = &update->drawable;
+    image = &update->image;
+
+    drawable->surface_id = qxl->target_surface;
+    drawable->bbox = *bbox;
+
+    //TODO add here clip rects!
+    drawable->clip_type = SPICE_CLIP_TYPE_NONE;
+
+    drawable->effect            = QXL_EFFECT_OPAQUE;
+    test_set_release_info (&drawable->release_info, (intptr_t)update);//same as &update->ext
+    drawable->type              = QXL_DRAW_COPY;
+    drawable->surfaces_dest[0]  = -1;
+    drawable->surfaces_dest[1]  = -1;
+    drawable->surfaces_dest[2]  = -1;
+
+    drawable->u.copy.rop_descriptor     = SPICE_ROPD_OP_PUT;
+    drawable->u.copy.src_bitmap         = (intptr_t)image; //?? TODO try bitmap
+    drawable->u.copy.src_area.right     = bw;
+    drawable->u.copy.src_area.bottom    = bh;
+    
+    QXL_SET_IMAGE_ID (image, QXL_IMAGE_GROUP_DEVICE, image_unique);
+    image->descriptor.type  = SPICE_IMAGE_TYPE_BITMAP;
 }
 
 void add_command (const TestCommand *command)
@@ -81,6 +139,19 @@ void remove_command (TestCommandItem *command)
 {
     ring_remove (&command->link);
     free (command);
+}
+void free_commands () 
+{    
+    RingItem *item, *next;
+    Ring* ring = (Ring*)&commands;
+    //TODO something wrong with macros!
+    for (item = ring_get_head(ring),                       
+         next = (item != NULL) ? ring_next(ring, item) : NULL;
+         item != NULL;                                   
+    item = next, next = item != NULL ? ring_next(ring, item) : NULL) {
+//    RING_FOREACH_SAVE(item, next, ring) {
+        remove_command ((TestCommandItem *)item);
+    }
 }
 //from server/tests/test_display_base.c
 void create_primary_surface( test_qxl_t* qxl,
@@ -181,6 +252,7 @@ static void produce_command (test_qxl_t *qxl)
     case COMMAND_DESTROY_PRIMARY:
         dprint (2, "%s: destroy primary\n",__func__ );
         qxl_worker->destroy_primary_surface(qxl_worker, 0);
+        break;
     default:
         dprint (1, "%s: unknown command of type_code %d\n", __func__, command->type );
         break;
@@ -202,4 +274,5 @@ void test_qxl_display_init (test_qxl_t *qxl) {
     qxl->current_command = ring_get_head(&commands);
     qxl->target_surface = 0;
     qxl->produce_command = produce_command;
+    qxl->release_resource = release_resource;
 }
