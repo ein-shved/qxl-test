@@ -23,7 +23,8 @@ typedef struct TestCommandItem {
     TestCommand command;
 } TestCommandItem;
 
-Ring commands;
+static Ring commands;
+static int image_unique = 1;
 
 static void set_cmd(QXLCommandExt *ext, uint32_t type, QXLPHYSICAL data)
 {
@@ -44,6 +45,15 @@ static void release_resource (test_qxl_t *qxl, QXLCommandExt *ext)
     case QXL_CMD_SURFACE: {
         TestSurfaceCmd *cmd = container_of (ext, TestSurfaceCmd, ext);
         free (cmd); //Can do free(ext);
+        break;
+    }
+
+    case QXL_CMD_DRAW: {
+        TestSpiceUpdate *update = container_of (ext, TestSpiceUpdate, ext);
+        if (update->bitmap.destroyable) {
+            free (update->bitmap.ptr);
+        }
+        free (update);
         break;
     }
         
@@ -88,11 +98,10 @@ static TestSurfaceCmd *destroy_surface(int surface_id)
     return simple_cmd;
 }
 
-static TestSpiceUpdate *test_create_update_draw (test_qxl_t *qxl, 
+static TestSpiceUpdate *test_create_update_from_bitmap (test_qxl_t *qxl, 
                 TestBitmap *bitmap, const QXLRect *bbox
                 /*,int num_clip_rects, QXLRect* clip_rects */)
 {
-    static int image_unique = 1;
     TestSpiceUpdate *update;
     QXLImage *image;
     QXLDrawable *drawable;
@@ -106,11 +115,11 @@ static TestSpiceUpdate *test_create_update_draw (test_qxl_t *qxl,
     drawable = &update->drawable;
     image = &update->image;
 
-    drawable->surface_id = qxl->target_surface;
+    drawable->surface_id = 0;//qxl->target_surface;
     drawable->bbox = *bbox;
 
     //TODO add here clip rects!
-    drawable->clip_type = SPICE_CLIP_TYPE_NONE;
+    drawable->clip.type = SPICE_CLIP_TYPE_NONE;
 
     drawable->effect            = QXL_EFFECT_OPAQUE;
     test_set_release_info (&drawable->release_info, (intptr_t)update);//same as &update->ext
@@ -120,12 +129,47 @@ static TestSpiceUpdate *test_create_update_draw (test_qxl_t *qxl,
     drawable->surfaces_dest[2]  = -1;
 
     drawable->u.copy.rop_descriptor     = SPICE_ROPD_OP_PUT;
-    drawable->u.copy.src_bitmap         = (intptr_t)image; //?? TODO try bitmap
+    drawable->u.copy.src_bitmap         = (intptr_t)image;
+    drawable->u.copy.src_area.top       = 0;
+    drawable->u.copy.src_area.left      = 0;
     drawable->u.copy.src_area.right     = bw;
     drawable->u.copy.src_area.bottom    = bh;
     
     QXL_SET_IMAGE_ID (image, QXL_IMAGE_GROUP_DEVICE, image_unique);
-    image->descriptor.type  = SPICE_IMAGE_TYPE_BITMAP;
+    image->descriptor.type      = SPICE_IMAGE_TYPE_BITMAP;
+    image->bitmap.flags         = QXL_BITMAP_DIRECT | QXL_BITMAP_TOP_DOWN;
+    image->bitmap.stride        = bw * 4; //TODO what this?
+    image->descriptor.width     = image->bitmap.x = bw;
+    image->descriptor.height    = image->bitmap.y = bh;
+    image->bitmap.data          = (intptr_t)bitmap->ptr;
+    image->bitmap.palette       = 0;
+    image->bitmap.format        = SPICE_BITMAP_FMT_32BIT;
+
+    set_cmd (&update->ext, QXL_CMD_DRAW, (intptr_t)drawable);
+
+    return update;
+}
+
+static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl, 
+                uint32_t color, const QXLRect *bbox )
+{
+    TestBitmap bitmap_str;
+    uint32_t *dst;
+    int bw, bh;
+    int i;
+
+    bw = bbox->right - bbox->left;
+    bh = bbox->bottom - bbox->top;
+    
+    bitmap_str.destroyable = TRUE;
+    bitmap_str.ptr = malloc (bw * bh * 4);
+    dst = (uint32_t *) bitmap_str.ptr;
+
+    for (i=0; i < bw * bh; ++i, ++dst) {
+        *dst = color;
+    }
+
+    return test_create_update_from_bitmap (qxl, &bitmap_str, bbox);
 }
 
 void add_command (const TestCommand *command)
@@ -144,7 +188,7 @@ void free_commands ()
 {    
     RingItem *item, *next;
     Ring* ring = (Ring*)&commands;
-    //TODO something wrong with macros!
+    //FIXME something wrong with macros!
     for (item = ring_get_head(ring),                       
          next = (item != NULL) ? ring_next(ring, item) : NULL;
          item != NULL;                                   
@@ -176,8 +220,10 @@ void create_primary_surface( test_qxl_t* qxl,
     surface.mem        = (uint64_t)&qxl->primary_surface;
     surface.group_id   = MEMSLOT_GROUP;
 
-    qxl->primary_width = width;
-    qxl->primary_height = height;
+    if (!qxl->has_secondary) {
+        qxl->width = width;
+        qxl->height = height;
+    }
 
     qxl_worker->create_primary_surface(qxl_worker, 0, &surface);
 }
@@ -191,13 +237,20 @@ static void produce_command (test_qxl_t *qxl)
     TestCommand *command;
     TestCommandItem *item;
     TestSurfaceCmd *surface_cmd = NULL;
+    TestCommand command_container;
     QXLWorker *qxl_worker = qxl->worker;
+
+    if ( ring_is_empty(&commands) ) {
+        qxl->current_command = NULL;
+        return;
+    }
+
     if ( qxl->current_command == NULL ) {       //If no commands in qxl struct
                                                 //get first from commands ring
         qxl->current_command = ring_get_head (&commands);       
                                                 //if no commands in ring
         if (qxl->current_command == NULL ) {
-            dprint (2, "%s: command ring is empty\n", __func__);
+            dprint (3, "command ring is empty");
             return;                             //quit
         }
     }
@@ -205,14 +258,20 @@ static void produce_command (test_qxl_t *qxl)
     item = (TestCommandItem *)qxl->current_command;
     command = &item->command;
 
+    if (command->type == COMMAND_CONTROL && 
+        command->control.type == COMMAND_CONTROL_USE_INSTEAD ) {
+        command->control.cg(command->control.opaque, &command_container);
+
+    }
+
     switch (command->type) {
     case COMMAND_SLEEP:
-        dprint (2, "%s: sleeping for %d secs\n", __func__, command->sleep.secs);
+        dprint (2, "sleeping for %d secs", command->sleep.secs);
         sleep (command->sleep.secs);
 
         break;
     case COMMAND_UPDATE: {
-        dprint (2, "%s: update area\n", __func__);
+        dprint (2, "update area");
         QXLRect rect = {
             .left = 0,
             .right = qxl->width,
@@ -224,7 +283,7 @@ static void produce_command (test_qxl_t *qxl)
     }
 
     case COMMAND_CREATE_SURFACE:
-        dprint (2, "%s: create surface\n", __func__);
+        dprint (2, "create surface");
         qxl->target_surface = NUM_SURFACES - 1; 
         surface_cmd = create_surface ( qxl->target_surface, &command->create_surface.rect,
                                        qxl->secondary_surface.surface );
@@ -236,25 +295,53 @@ static void produce_command (test_qxl_t *qxl)
         break;
     
     case COMMAND_DESTROY_SURFACE:
-        dprint (2, "%s: destroy surface\n", __func__ );
+        dprint (2, "destroy surface");
         qxl->has_secondary = FALSE;
         surface_cmd = destroy_surface (qxl->target_surface);
         qxl->target_surface = 0;
         break;
 
     case COMMAND_CREATE_PRIMARY:
-        dprint (2, "%s: crate primary\n", __func__ );
+        dprint (2, "crate primary");
         create_primary_surface ( qxl,
                                  command->create_primary.rect.right - command->create_primary.rect.left,
                                  command->create_primary.rect.bottom - command->create_primary.rect.top );
 
         break;
+
     case COMMAND_DESTROY_PRIMARY:
-        dprint (2, "%s: destroy primary\n",__func__ );
+        dprint (2, "destroy primary");
         qxl_worker->destroy_primary_surface(qxl_worker, 0);
         break;
+    
+    case COMMAND_DRAW: {
+        TestSpiceUpdate *update = NULL;
+        switch (command->draw.type) {
+        case COMMAND_DRAW_FROM_BITMAP: {
+            dprint (2, "draw bitmap");
+            update = test_create_update_from_bitmap (qxl, 
+                        &command->draw.bitmap, &command->draw.rect);
+            break;
+        }
+        case COMMAND_DRAW_SOLID: {
+            dprint (2, "draw solid");
+            update = test_create_update_solid (qxl,
+                        command->draw.color, &command->draw.rect);
+            break;
+        }
+        default:
+            dprint (2, "unknown draw command");
+            break;
+        }
+
+        if (update != NULL ) {
+            qxl->push_command(qxl, &update->ext);
+        }
+        break;
+    }
+
     default:
-        dprint (1, "%s: unknown command of type_code %d\n", __func__, command->type );
+        dprint (1, "unknown command of type_code %d", command->type );
         break;
     }
 
@@ -263,12 +350,24 @@ static void produce_command (test_qxl_t *qxl)
     }
     qxl->current_command = ring_next (&commands, &item->link); 
     if (command->times > 0) {
-        if ( --command->times == 0) {
+        if ( --command->times <= 0) {
+            if (qxl->current_command == &item->link) {
+                qxl->current_command = NULL;
+            }
             remove_command (item); 
         }
     }
 }
 
+void siple_command_gen (void *opaque, TestCommand *command) {
+    TestNewCommand *new_cmd = (TestNewCommand *)opaque;
+    *command=new_cmd->command;
+    if (new_cmd->times != 0) {
+        if (--new_cmd->times == 0) {
+            free (new_cmd);
+        }
+    }
+}
 void test_qxl_display_init (test_qxl_t *qxl) {
     ring_init (&commands);
     qxl->current_command = ring_get_head(&commands);

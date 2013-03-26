@@ -4,6 +4,7 @@ project (qxl-test)
 # The version number.
 set (TEST_QXL_VERSION_MAJOR 0)
 set (TEST_QXL_VERSION_MINOR 0)
+set (DEBUG 2)
 
 set (CURRENT_DIR "/home/shved/Projects/Spice/qxl-test")
 set (PREFIX "/home/shved/Projects/Spice/install")
@@ -11,6 +12,8 @@ set (PROJECT_BINARY_DIR "${CURRENT_DIR}/bin")
 
 set (LIBRARY_OUTPUT_PATH "${CURRENT_DIR}/obj")
 set (EXECUTABLE_OUTPUT_PATH "${CURRENT_DIR}/bin")
+
+set (CMAKE_C_FLAGS "-g")
 
 # configure a header file to pass some of the CMake settings
 # to the source code

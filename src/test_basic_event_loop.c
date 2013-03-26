@@ -11,7 +11,7 @@
 #include "common/ring.h"
 
 #define DPRINTF(fmt, ...) \
-    dprint (3, "%s: " fmt "\n", __func__, ## __VA_ARGS__)
+    dprint (3, fmt, ## __VA_ARGS__)
 
 static SpiceCoreInterface core;
 

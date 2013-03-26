@@ -1,29 +1,19 @@
 #ifndef TEST_QXL_DEVICE_H
 #define TEST_QXL_DEVICE_H
 
-#define DEBUG 2
-
 #include <spice.h>
 #include <stdio.h>
 #include <assert.h>
 #include <spice/qxl_dev.h>
+#include <spice/macros.h>
 
-#ifndef BOOL
-#   define BOOL int
-#endif //BOOL
-
-#ifndef TRUE
-#   define TRUE 1
-#endif //TRUE
-
-#ifndef FALSE
-#   define FALSE 0
-#endif //FALSE
+#include "common/ring.h"
+#include "test_qxl_config.h"
 
 #define NOT_IMPLEMENTED printf("%s not implemented\n", __func__);
 
 #define dprint(lvl, fmt, ...) \
-    if (lvl <= DEBUG) printf(fmt, ## __VA_ARGS__)
+    if ((lvl) <= DEBUG) printf("%s: " fmt "\n", __func__, ## __VA_ARGS__)
 
 #define __FUNCTION__ __func__
 #define ASSERT assert
@@ -31,13 +21,11 @@
 #define MAX_HEIGHT 1024
 #define MAX_WIDTH 1024
 
-
-//FIXME reuse from other source (no copy-paste)
-#ifndef container_of
 #define container_of(ptr, type, member) \
-    (type *)((char *)(ptr) - offsetof(type, member))
-#endif //container_of
+    SPICE_CONTAINEROF(ptr, type, member)
 
+#define COLOR_RGB(r,g,b) \
+    (((r)<<16) | ((g)<<8) | ((b)<<0))
 
 #define NUM_MEMSLOTS        1
 #define NUM_MEMSLOTS_GROUPS 1
@@ -51,57 +39,6 @@
 #define MEMSLOT_GROUP 0
 
 #define NUM_MAX_COMMANDS 1024
-
-typedef struct Ring RingItem;
-
-//Command types
-typedef enum TestCommandType {
-    COMMAND_SLEEP,
-    COMMAND_UPDATE,
-    COMMAND_CREATE_SURFACE,
-    COMMAND_DESTROY_SURFACE,
-    COMMAND_CREATE_PRIMARY,
-    COMMAND_DESTROY_PRIMARY,
-    COMMAND_DRAW,
-} TestCommandType;
-typedef struct TestCommandSleep {
-    uint32_t secs;
-} TestCommandSleep;
-typedef struct TestCommandUpdate {
-} TestCommandUpdate;
-typedef struct TestCommandCreateSurface {
-    QXLRect rect;
-} TestCommandCreateSurface;
-typedef struct TestCommandDestroySurface {
-} TestCommandDestroySurface;
-typedef struct TestCommandDraw {
-    enum {
-        COMMAND_DRAW_FROM_BITMAP,
-        COMMAND_DRAW_SIMPLE,
-    } type;
-    QXLRect rect;
-    union {
-        uint32_t color;
-        struct TestBitmap {
-            uint8_t *ptr;
-            int destroyable;
-        } bitmap;
-    };
-};
-
-typedef struct TestCommand {
-    TestCommandType type;
-    int times;  //if =0 then infinitely
-                //else, command will removed after times execs
-    union {
-        TestCommandSleep sleep;
-        TestCommandUpdate update;
-        TestCommandCreateSurface create_surface;
-        TestCommandCreateSurface create_primary;
-        TestCommandDraw draw;
-    };
-} TestCommand;
-
 
 typedef struct _test_surface_t {
     //from server/tests/test_display_base.c
