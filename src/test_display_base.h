@@ -91,7 +91,7 @@ typedef struct TestCommandSwitchSurface {
     uint32_t surface_id;
 } TestCommandSwitchSurface;
 
-typedef struct TestCommand {
+struct TestCommand {
     TestCommandType type;
     int times;  /* if =0 then infinitely
                  * else, command will removed after times execs
@@ -105,7 +105,7 @@ typedef struct TestCommand {
         TestCommandControl control;
         TestCommandSwitchSurface switch_surface;
     };
-} TestCommand;
+};
 
 typedef struct TestCommandItem TestCommandItem;
 

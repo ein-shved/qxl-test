@@ -31,8 +31,6 @@ typedef struct Ring {
     RingItem *next;
 } Ring;
 
-typedef struct Ring RingItem;
-
 static inline void ring_init(Ring *ring)
 {
     ring->next = ring->prev = ring;

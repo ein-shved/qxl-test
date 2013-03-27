@@ -22,10 +22,10 @@ typedef struct TestSpiceUpdate {
     TestBitmap bitmap;
 } TestSpiceUpdate;
 
-typedef struct TestCommandItem {
+struct TestCommandItem {
     RingItem link;
     TestCommand command;
-} TestCommandItem;
+};
 
 static Ring commands;
 static uint32_t image_unique = 1;

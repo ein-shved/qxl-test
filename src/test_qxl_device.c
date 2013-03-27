@@ -16,22 +16,27 @@
 #define OBJ_POS_X 160
 #define OBJ_POS_Y 120
 
-static uint32_t image_id;
+#define check_argument(arg,long_str,short_str) \
+    !strcmp((arg),"--"long_str) || !strcmp((arg),"-"short_str)
+
 static int32_t obj_x = PR_WIDTH/2;
-static int32_t obj_y = PR_HEIGHT/2;
+static int32_t obj_y = PR_HEIGHT + OBJ_HEIGHT;
+static double obj_width = OBJ_WIDTH;
 uint8_t buffer[OBJ_HEIGHT*OBJ_WIDTH*4 ];
 
 static void cg_1 (void *opaque, TestCommand *command)
 {
     test_qxl_t *qxl = (test_qxl_t *)opaque;
     QXLRect rect = {
-        .left   = obj_x - OBJ_WIDTH/2,
-        .right  = obj_x + OBJ_WIDTH/2,
+        .left   = obj_x - obj_width/2,
+        .right  = obj_x + obj_width/2,
         .top    = obj_y - OBJ_HEIGHT/2,
         .bottom = obj_y + OBJ_HEIGHT/2,
     };
     command->draw.rect = rect;
-    /*obj_y += STRIDE;
+
+    obj_width = OBJ_WIDTH/2; //(obj_y*OBJ_WIDTH/(PR_HEIGHT+OBJ_HEIGHT)) % OBJ_WIDTH;
+/*    obj_y += STRIDE;
     if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
         obj_y = -OBJ_HEIGHT/2;
     }*/
@@ -101,6 +106,9 @@ static void test_qxl_spice_server_new ( test_qxl_t *qxl,
     if (ops->no_auth ) {
         spice_server_set_noauth ( qxl->spice_server );
     }
+
+    dprint (1, "spice server created. Addres: '%s' Port: '%d'", 
+        ops->addr, ops->port);
 
     //TODO set another spice server options here   
 
@@ -176,6 +184,51 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.times = 0;
     //add_command(&cmd);
 }
+int parse_args ( int argc, const char *argv[], TestServerOpts *ops ) {
+    int i;
+    int ret = 0;
+    for (i=1; i < argc; ++i) {
+        if (check_argument(argv[i],"port","p")) {
+            if ( i+1 >= argc ) {
+                ret=-1;
+                goto port_error;
+            }
+            const char *endptr = argv[++i];
+            ops->port = strtoul(argv[i], &endptr, 0);
+            if (*endptr != '\0') {
+                --i; 
+                ret=-1;
+                goto port_error;
+            }
+        } else
+        if (check_argument(argv[i],"addr","a")) {
+            if ( i+1 >=argc ) {
+                goto addr_error;
+            }
+            ops->addr = argv[++i];
+        } else
+        if (check_argument(argv[i],"help","h")) {
+            printf (
+                "Usage: qxl-test [OPTIONS]..\n"
+                "Test programm for spice server with\n"
+                "\n"
+                "Options is:\n"
+                "\t-p\t--port=PORT\tuse specify port for server [5912]\n"
+                "\t-a\t--addr=ADDRESS\tuse specify address for server [localhost]\n"
+                "\t-h\t--help\tshow this message and exit\n"
+                );
+            ret=1;
+        }
+    }
+
+    return ret;
+port_error:
+    fprintf (stderr, "Need port number after '%s' option\n", argv[i] );
+    return ret;
+addr_error:
+    fprintf (stderr, "Need addr after '%s' option\n", argv[i] );
+    return ret;    
+}
 
 int main (int argc, const char *argv[])
 {
@@ -183,12 +236,27 @@ int main (int argc, const char *argv[])
     SpiceCoreInterface *core;
     const char *host = "localhost";
     int port = 5912;
+    int ret;
     TestServerOpts ops = {
         .addr = host,
         .flags = 0,
         .port = port,
         .no_auth = TRUE,
     };
+    
+    ret = parse_args (argc, argv, &ops);
+
+    switch (ret){
+    case 1:
+        return 0;
+        break;
+    case 0:
+        break;
+    default:
+        fprintf(stderr,"\tTry '--help' for more information\n");
+        return ret;
+        break;
+    }
 
     core = basic_event_loop_init();
     qxl = new_test (core);
