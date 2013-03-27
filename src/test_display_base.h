@@ -44,10 +44,14 @@ typedef struct TestBitmap {
     uint8_t *ptr;
     int destroyable;
 } TestBitmap;
+typedef struct TestClipList {
+    uint32_t num_rects;
+    QXLRect *ptr;
+    int destroyable;
+} TestClipList;
 typedef struct TestCommandDraw {
     TestCommandDrawType type;
     QXLRect rect;
-    //next fot image only;
     TestImageCached cache;
     uint32_t image_id;  /* Must be zero first time
                          * reused on other steps.
@@ -56,6 +60,7 @@ typedef struct TestCommandDraw {
     void *opaque;
     uint32_t color;
     TestBitmap bitmap;
+    TestClipList clip_rects;
 } TestCommandDraw;
 typedef enum TestCommandControlType{
     //TODO: implement or remove
