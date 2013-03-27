@@ -117,6 +117,7 @@ static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ex
             commands.end %= MAX_COMMAND_NUM;
         }
         ASSERT_COMMANDS;
+
         return TRUE;
     }
 

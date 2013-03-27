@@ -5,7 +5,8 @@
 #include "test_qxl_config.h"
 
 //Command types
-typedef (*command_gen) (void *opaque, TestCommand* command);
+typedef struct TestCommand TestCommand;
+typedef void (*command_gen) (void *opaque, TestCommand* command);
 
 typedef enum TestCommandType {
     COMMAND_SLEEP,
@@ -16,6 +17,7 @@ typedef enum TestCommandType {
     COMMAND_DESTROY_PRIMARY,
     COMMAND_DRAW,
     COMMAND_CONTROL,
+    COMMAND_SWITCH_SURFACE,
 } TestCommandType;
 typedef struct TestCommandSleep {
     uint32_t secs;
@@ -30,7 +32,14 @@ typedef struct TestCommandDestroySurface {
 typedef enum TestCommandDrawType {
         COMMAND_DRAW_FROM_BITMAP,
         COMMAND_DRAW_SOLID,
+        COMMAND_DRAW_SURFACE,
+        COMMAND_DRAW_CACHED,
+        COMMAND_DRAW_FILL,
 } TestCommandDrawType;
+typedef enum TestImageCached {
+    TEST_IMAGE_NO_CACHE,
+    TEST_IMAGE_CACHE,
+} TestImageCached;
 typedef struct TestBitmap {
     uint8_t *ptr;
     int destroyable;
@@ -38,12 +47,18 @@ typedef struct TestBitmap {
 typedef struct TestCommandDraw {
     TestCommandDrawType type;
     QXLRect rect;
-    union {
-        uint32_t color;
-        TestBitmap bitmap;
-    };
+    //next fot image only;
+    TestImageCached cache;
+    uint32_t image_id;  /* Must be zero first time
+                         * reused on other steps.
+                         */
+    command_gen cg;
+    void *opaque;
+    uint32_t color;
+    TestBitmap bitmap;
 } TestCommandDraw;
 typedef enum TestCommandControlType{
+    //TODO: implement or remove
     COMMAND_CONTROL_PUSH_LAST,      //ABS
     COMMAND_CONTROL_PUSH_FIRST,     //ABS
     COMMAND_CONTROL_PUSH,           //REL
@@ -58,15 +73,18 @@ typedef enum TestCommandControlType{
                                      * use it instead currend, without
                                      * adding to ring
                                      */
+    COMMAND_CONTROL_IGNORE,         //Do nothing
+
 } TestCommandControlType;
 typedef struct TestCommandControl {
     TestCommandControlType type;
-    union {
-        command_gen *cg;
-        void *opaque;
-        RingItem *pos;  //not need for ABS commands.
-    };
+    command_gen cg;
+    void *opaque;
+    RingItem *pos;  //not need for ABS commands.
 } TestCommandControl;
+typedef struct TestCommandSwitchSurface {
+    uint32_t surface_id;
+} TestCommandSwitchSurface;
 
 typedef struct TestCommand {
     TestCommandType type;
@@ -80,6 +98,7 @@ typedef struct TestCommand {
         TestCommandCreateSurface create_primary;
         TestCommandDraw draw;
         TestCommandControl control;
+        TestCommandSwitchSurface switch_surface;
     };
 } TestCommand;
 
@@ -92,11 +111,15 @@ typedef struct TestNewCommand { //used by simple_command_gen as opaque
                 * should be equal to times of command, or 0
                 */
 } TestNewCommand;
+
+void draw_command_init (TestCommand *command);
 void siple_command_gen (void *opaque, TestCommand *command);
 
 void test_qxl_display_init (test_qxl_t *qxl);
-void add_command (const TestCommand *command);
-void remove_command (TestCommandItem *item);
+RingItem *add_command (const TestCommand *command);
+void remove_command (RingItem *item);
+TestCommand *get_next_command (RingItem *item);
+
 void create_primary_surface ( test_qxl_t *qxl,
                               uint32_t width, uint32_t height );
 void free_commands ();

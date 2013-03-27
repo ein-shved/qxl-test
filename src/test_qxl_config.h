@@ -1,3 +1,3 @@
 #define QXL_TEST_VERSION_MAJOR 
 #define QXL_TEST_VERSION_MINOR 
-#define DEBUG 2
+#define DEBUG 1

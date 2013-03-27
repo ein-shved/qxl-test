@@ -4,7 +4,7 @@ project (qxl-test)
 # The version number.
 set (TEST_QXL_VERSION_MAJOR 0)
 set (TEST_QXL_VERSION_MINOR 0)
-set (DEBUG 2)
+set (DEBUG 1)
 
 set (CURRENT_DIR "/home/shved/Projects/Spice/qxl-test")
 set (PREFIX "/home/shved/Projects/Spice/install")

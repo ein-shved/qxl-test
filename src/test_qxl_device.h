@@ -40,6 +40,8 @@
 
 #define NUM_MAX_COMMANDS 1024
 
+typedef uint32_t color_t;
+
 typedef struct _test_surface_t {
     //from server/tests/test_display_base.c
     uint8_t surface [ MAX_HEIGHT * MAX_WIDTH * 4 ]; 
@@ -64,7 +66,7 @@ struct _test_qxl_t {
     int primary_width;
     int primary_height;
 
-    int target_surface;
+    uint32_t target_surface;
     int has_secondary;
     test_surface_t secondary_surface;
     int width;
