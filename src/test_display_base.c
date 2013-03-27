@@ -411,8 +411,8 @@ static void produce_command (test_qxl_t *qxl)
     case COMMAND_CREATE_PRIMARY:
         dprint (2, "crate primary");
         create_primary_surface ( qxl,
-                                 command->create_primary.rect.right - command->create_primary.rect.left,
-                                 command->create_primary.rect.bottom - command->create_primary.rect.top );
+            command->create_primary.rect.right - command->create_primary.rect.left,
+            command->create_primary.rect.bottom - command->create_primary.rect.top );
 
         break;
 

@@ -22,7 +22,7 @@
 static int32_t obj_x = PR_WIDTH/2;
 static int32_t obj_y = PR_HEIGHT + OBJ_HEIGHT;
 static double obj_width = OBJ_WIDTH;
-uint8_t buffer[OBJ_HEIGHT*OBJ_WIDTH*4 ];
+static QXLRect global_rect;
 
 static void cg_1 (void *opaque, TestCommand *command)
 {
@@ -53,6 +53,27 @@ static void cg_2 (void *opaque, TestCommand *command)
 
     command->draw.rect = rect;
     
+    obj_y += STRIDE;
+    if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
+        obj_y = -OBJ_HEIGHT/2;
+    }
+}
+
+static void cg_clip_3 (void *opaque, TestCommand *command)
+{
+    test_qxl_t *qxl = (test_qxl_t *)opaque;
+    QXLRect rect = {
+        .left   = obj_x - OBJ_WIDTH/2,
+        .right  = obj_x + OBJ_WIDTH/2,
+        .top    = obj_y - OBJ_HEIGHT/2 - STRIDE,
+        .bottom = obj_y - OBJ_HEIGHT/2,
+    };
+    global_rect = rect;
+
+    command->draw.clip_rects.num_rects = 1;
+    command->draw.clip_rects.ptr = &global_rect;
+    command->draw.clip_rects.destroyable = FALSE;
+
     obj_y += STRIDE;
     if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
         obj_y = -OBJ_HEIGHT/2;
@@ -153,9 +174,10 @@ static void fill_commands(test_qxl_t *qxl)
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_FILL;
     cmd.draw.rect   = prim_rect;
-    cmd.draw.color  = COLOR_RGB(0,0,0);
+    cmd.draw.color  = COLOR_RGB(200,127,0);
+    cmd.draw.cg     = cg_clip_3;
     cmd.times       = 0;
-//    add_command (&cmd);
+    add_command (&cmd);
 
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_SOLID;
@@ -164,7 +186,7 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.draw.cg     = cg_1;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
-    add_command (&cmd);
+//    add_command (&cmd);
 
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_SOLID;
@@ -173,7 +195,7 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.draw.cg     = cg_2;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
-    add_command (&cmd);
+//    add_command (&cmd);
 
     cmd.type    = COMMAND_UPDATE;
     cmd.times   = 0;
