@@ -112,10 +112,31 @@ static TestSurfaceCmd *destroy_surface(int surface_id)
     surface_cmd->surface_id = surface_id;
     return simple_cmd;
 }
+static void test_fill_clip_data (QXLDrawable *drawable, TestClipList *clip_rects)
+{
+    if (clip_rects == NULL || clip_rects->num_rects == 0) {
+        drawable->clip.type = SPICE_CLIP_TYPE_NONE;
+    } else {
+        QXLClipRects *cmd_clip;
+
+        cmd_clip = calloc (sizeof(QXLClipRects) + 
+            clip_rects->num_rects * sizeof(QXLRect), 1);
+        cmd_clip->num_rects = clip_rects->num_rects;
+        cmd_clip->chunk.data_size = clip_rects->num_rects*sizeof(QXLRect);
+        cmd_clip->chunk.prev_chunk = cmd_clip->chunk.next_chunk = 0;
+        memcpy(cmd_clip + 1, clip_rects->ptr, cmd_clip->chunk.data_size);
+
+        drawable->clip.type = SPICE_CLIP_TYPE_RECTS;
+        drawable->clip.data = (intptr_t)cmd_clip;
+
+        if (clip_rects->destroyable) {
+            free(clip_rects->ptr);
+        }
+    }
+}
 static TestSpiceUpdate *test_create_update_image (test_qxl_t *qxl, 
                 TestBitmap *bitmap, const QXLRect *bbox, uint32_t image_id,
-                uint32_t surface_id
-                /*,int num_clip_rects, QXLRect* clip_rects */)
+                uint32_t surface_id, TestClipList *clip_rects)
 {
     TestSpiceUpdate *update;
     QXLImage *image;
@@ -132,8 +153,7 @@ static TestSpiceUpdate *test_create_update_image (test_qxl_t *qxl,
     drawable->surface_id = surface_id; 
     drawable->bbox = *bbox;
 
-    //TODO add here clip rects!
-    drawable->clip.type = SPICE_CLIP_TYPE_NONE;
+    test_fill_clip_data (drawable, clip_rects); 
 
     drawable->effect            = QXL_EFFECT_BLEND;
     test_set_release_info (&drawable->release_info, (intptr_t)update);//same as &update->ext
@@ -170,7 +190,7 @@ static TestSpiceUpdate *test_create_update_image (test_qxl_t *qxl,
 
 static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
            color_t color, const QXLRect *bbox,
-           uint32_t surface_id)
+           uint32_t surface_id, TestClipList *clip_rects)
 {
     TestSpiceUpdate *update;
     QXLDrawable *drawable;
@@ -183,8 +203,7 @@ static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
     drawable->surface_id = surface_id; 
     drawable->bbox = *bbox;
 
-    //TODO add here clip rects!
-    drawable->clip.type = SPICE_CLIP_TYPE_NONE;
+    test_fill_clip_data (drawable, clip_rects);
 
     drawable->effect            = QXL_EFFECT_OPAQUE;
     test_set_release_info (&drawable->release_info, (intptr_t)update);
@@ -206,7 +225,9 @@ static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
 }
 
 static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl, 
-                TestCommandDraw *command, int is_last_call, uint32_t surface_id)
+                TestCommandDraw *command, int is_last_call, 
+                uint32_t surface_id, TestClipList *clip_rects)
+{
     TestBitmap bitmap_str;
     uint32_t *dst;
     QXLRect *bbox = &command->rect;
@@ -235,7 +256,7 @@ static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl,
     bitmap_str.destroyable = is_last_call;
 
     return test_create_update_image (qxl, &bitmap_str,
-        bbox, command->image_id, surface_id);
+        bbox, command->image_id, surface_id, clip_rects);
 }
 
 /* ================================================================
@@ -390,8 +411,8 @@ static void produce_command (test_qxl_t *qxl)
     case COMMAND_CREATE_PRIMARY:
         dprint (2, "crate primary");
         create_primary_surface ( qxl,
-                                 command->create_primary.rect.right - command->create_primary.rect.left,
-                                 command->create_primary.rect.bottom - command->create_primary.rect.top );
+            command->create_primary.rect.right - command->create_primary.rect.left,
+            command->create_primary.rect.bottom - command->create_primary.rect.top );
 
         break;
 
@@ -413,19 +434,21 @@ static void produce_command (test_qxl_t *qxl)
             }
             update = test_create_update_image (qxl, 
                 &command->draw.bitmap, &command->draw.rect, 
-                command->draw.image_id,0 );
+                command->draw.image_id, 0, &command->draw.clip_rects );
             break;
         }
         case COMMAND_DRAW_SOLID: {
             dprint (2, "draw solid");
             update = test_create_update_solid (qxl,
-                &command->draw,(command->times == 1), 0);
+                &command->draw,(command->times == 1), 0,
+                &command->draw.clip_rects);
             break;
         }
         case COMMAND_DRAW_FILL: {
             dprint (2, "fill surface");
             update = test_create_update_fill (qxl,
-                command->draw.color, &command->draw.rect, 0);
+                command->draw.color, &command->draw.rect, 0,
+                &command->draw.clip_rects);
             break;
         }
         case COMMAND_DRAW_SURFACE: {
@@ -498,7 +521,11 @@ void draw_command_init (TestCommand *command) {
     command->draw.image_id      = 0;
     command->draw.cg            = NULL;
     command->draw.opaque        = NULL;
-    command->draw.bitmap.ptr    = NULL;
+    command->draw.bitmap.ptr         = NULL;
+    command->draw.bitmap.destroyable = FALSE;
+    command->draw.clip_rects.num_rects   = 0;
+    command->draw.clip_rects.ptr         = NULL;
+    command->draw.clip_rects.destroyable = FALSE;
 }
 void siple_command_gen (void *opaque, TestCommand *command) {
     TestNewCommand *new_cmd = (TestNewCommand *)opaque;
