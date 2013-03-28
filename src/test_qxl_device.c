@@ -22,7 +22,12 @@
 static int32_t obj_x = PR_WIDTH/2;
 static int32_t obj_y = PR_HEIGHT + OBJ_HEIGHT;
 static double obj_width = OBJ_WIDTH;
-static QXLRect global_rect;
+static QXLRect global_rect = {
+        .left   = PR_WIDTH/2 - OBJ_WIDTH/2,
+        .right  = PR_WIDTH/2 + OBJ_WIDTH/2,
+        .top    = PR_HEIGHT/2 - OBJ_HEIGHT/2,
+        .bottom = PR_HEIGHT/2 + OBJ_HEIGHT/2,
+};
 
 static void cg_1 (void *opaque, TestCommand *command)
 {
@@ -34,8 +39,10 @@ static void cg_1 (void *opaque, TestCommand *command)
         .bottom = obj_y + OBJ_HEIGHT/2,
     };
     command->draw.rect = rect;
+    command->draw.clip_rects.ptr            = &global_rect;
+    command->draw.clip_rects.destroyable    = FALSE;
+    command->draw.clip_rects.num_rects      = 1;
 
-    obj_width = OBJ_WIDTH/2; //(obj_y*OBJ_WIDTH/(PR_HEIGHT+OBJ_HEIGHT)) % OBJ_WIDTH;
 /*    obj_y += STRIDE;
     if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
         obj_y = -OBJ_HEIGHT/2;
@@ -177,7 +184,7 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.draw.color  = COLOR_RGB(200,127,0);
     cmd.draw.cg     = cg_clip_3;
     cmd.times       = 0;
-    add_command (&cmd);
+//    add_command (&cmd);
 
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_SOLID;
@@ -186,7 +193,7 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.draw.cg     = cg_1;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
-//    add_command (&cmd);
+    add_command (&cmd);
 
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_SOLID;
@@ -195,7 +202,7 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.draw.cg     = cg_2;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
-//    add_command (&cmd);
+    add_command (&cmd);
 
     cmd.type    = COMMAND_UPDATE;
     cmd.times   = 0;
