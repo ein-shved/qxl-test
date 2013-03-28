@@ -207,7 +207,6 @@ static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
 
 static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl, 
                 TestCommandDraw *command, int is_last_call, uint32_t surface_id)
-{
     TestBitmap bitmap_str;
     uint32_t *dst;
     QXLRect *bbox = &command->rect;

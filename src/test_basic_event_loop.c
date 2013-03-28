@@ -11,7 +11,7 @@
 #include "common/ring.h"
 
 #define DPRINTF(fmt, ...) \
-    dprint (3, fmt, ## __VA_ARGS__)
+    dprint (4, fmt, ## __VA_ARGS__)
 
 static SpiceCoreInterface core;
 
@@ -135,7 +135,6 @@ struct timeval now;
 
 void tv_b_minus_a_return_le_zero(struct timeval *a, struct timeval *b, struct timeval *dest)
 {
-    DPRINTF("");
     dest->tv_usec = b->tv_usec - a->tv_usec;
     dest->tv_sec = b->tv_sec - a->tv_sec;
     while (dest->tv_usec < 0) {

@@ -89,11 +89,12 @@ static void test_interface_set_mm_time(QXLInstance *sin, uint32_t mm_time)
 }
 static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 {
-    memset (info,0,sizeof(*info));
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
-    
+   
+    memset (info,0,sizeof(*info));
+
     info->num_memslots = NUM_MEMSLOTS;
     info->num_memslots_groups = NUM_MEMSLOTS_GROUPS;
     info->memslot_id_bits = MEMSLOT_ID_BITS;
