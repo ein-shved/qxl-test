@@ -10,8 +10,8 @@
 
 #define STRIDE 1
 
-#define OBJ_WIDTH 320
-#define OBJ_HEIGHT 240
+#define OBJ_WIDTH 322
+#define OBJ_HEIGHT 242
 
 #define OBJ_POS_X 160
 #define OBJ_POS_Y 120
@@ -22,12 +22,35 @@
 static int32_t obj_x = PR_WIDTH/2;
 static int32_t obj_y = PR_HEIGHT + OBJ_HEIGHT;
 static double obj_width = OBJ_WIDTH;
+static uint8_t one_bitmap [OBJ_WIDTH*OBJ_HEIGHT*4];
+
 static QXLRect global_rect = {
         .left   = PR_WIDTH/2 - OBJ_WIDTH/2,
         .right  = PR_WIDTH/2 + OBJ_WIDTH/2,
         .top    = PR_HEIGHT/2 - OBJ_HEIGHT/2,
         .bottom = PR_HEIGHT/2 + OBJ_HEIGHT/2,
 };
+
+static void fill_bitmap (uint8_t *bitmap) {
+    uint32_t *dst = (uint32_t *) bitmap;
+    int r=256,g=256,b=256;
+    int stride = 8;
+    int i;
+
+    for (i=0; i<OBJ_WIDTH*OBJ_HEIGHT; ++i, ++dst) {
+        r = (r-stride);
+        if ( r <= 0 || r >= 256 ) {
+            stride = -stride;
+        }
+        if ( r >=256) {
+            r=255;
+        }
+        if ( r<=0) {
+            r=0;
+        }
+        *dst = COLOR_RGB(r,r,r);
+    }
+}
 
 static void cg_1 (void *opaque, TestCommand *command)
 {
@@ -41,7 +64,7 @@ static void cg_1 (void *opaque, TestCommand *command)
     command->draw.rect = rect;
     command->draw.clip_rects.ptr            = &global_rect;
     command->draw.clip_rects.destroyable    = FALSE;
-    command->draw.clip_rects.num_rects      = 1;
+    command->draw.clip_rects.num_rects      = 0;
 
 /*    obj_y += STRIDE;
     if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
@@ -186,10 +209,12 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.times       = 0;
 //    add_command (&cmd);
 
+    fill_bitmap (one_bitmap);
     draw_command_init (&cmd);
-    cmd.draw.type   = COMMAND_DRAW_SOLID;
+    cmd.draw.type   = COMMAND_DRAW_FROM_BITMAP;
     cmd.draw.rect   = rect;
-    cmd.draw.color  = COLOR_RGB(200,127,0);
+    cmd.draw.bitmap.ptr         = one_bitmap;
+    cmd.draw.bitmap.destroyable = FALSE;
     cmd.draw.cg     = cg_1;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
@@ -239,12 +264,12 @@ int parse_args ( int argc, const char *argv[], TestServerOpts *ops ) {
         if (check_argument(argv[i],"help","h")) {
             printf (
                 "Usage: qxl-test [OPTIONS]..\n"
-                "Test programm for spice server with\n"
+                "Test programm for spice server\n"
                 "\n"
                 "Options is:\n"
                 "\t-p\t--port=PORT\tuse specify port for server [5912]\n"
                 "\t-a\t--addr=ADDRESS\tuse specify address for server [localhost]\n"
-                "\t-h\t--help\tshow this message and exit\n"
+                "\t-h\t--help\t\tshow this message and exit\n"
                 );
             ret=1;
         }
