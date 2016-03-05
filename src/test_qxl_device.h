@@ -44,9 +44,9 @@ typedef uint32_t color_t;
 
 typedef struct _test_surface_t {
     //from server/tests/test_display_base.c
-    uint8_t surface [ MAX_HEIGHT * MAX_WIDTH * 4 ]; 
+    uint8_t surface [ MAX_HEIGHT * MAX_WIDTH * 4 ];
 } test_surface_t;
-struct _test_qxl_t {
+typedef struct _test_qxl_t {
     QXLInstance display_sin;
     QXLWorker *worker;
     SpiceCoreInterface *core;
@@ -71,9 +71,9 @@ struct _test_qxl_t {
     test_surface_t secondary_surface;
     int width;
     int height;
-};
-typedef struct _test_qxl_t test_qxl_t;
+} test_qxl_t;
 
 QXLInterface *test_init_qxl(void);
+void test_init_qxl_interface (test_qxl_t *qxl);
 
 #endif //TEST_QXL_DEVICE_H

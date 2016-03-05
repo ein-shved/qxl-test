@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <spice/qxl_dev.h>
 
@@ -75,14 +76,14 @@ static void release_resource (test_qxl_t *qxl, QXLCommandExt *ext)
     }
 }
 
-static TestSurfaceCmd *create_surface(int surface_id, 
+static TestSurfaceCmd *create_surface(int surface_id,
         const QXLRect *rect, uint8_t *data)
 {
     int width = rect->right - rect->left;
     int height = rect->bottom - rect->top;
     TestSurfaceCmd *simple_cmd = calloc(sizeof(TestSurfaceCmd), 1);
     QXLSurfaceCmd *surface_cmd = &simple_cmd->surface_cmd;
-    
+
     assert (width <= MAX_WIDTH && height <= MAX_HEIGHT);
 
     //Set the QXLCommandExt's type tp QXL_CMD_SURFACE and data
@@ -119,7 +120,7 @@ static void test_fill_clip_data (QXLDrawable *drawable, TestClipList *clip_rects
     } else {
         QXLClipRects *cmd_clip;
 
-        cmd_clip = calloc (sizeof(QXLClipRects) + 
+        cmd_clip = calloc (sizeof(QXLClipRects) +
             clip_rects->num_rects * sizeof(QXLRect), 1);
         cmd_clip->num_rects = clip_rects->num_rects;
         cmd_clip->chunk.data_size = clip_rects->num_rects*sizeof(QXLRect);
@@ -134,7 +135,71 @@ static void test_fill_clip_data (QXLDrawable *drawable, TestClipList *clip_rects
         }
     }
 }
-static TestSpiceUpdate *test_create_update_image (test_qxl_t *qxl, 
+
+static int make_drawable (const QXLRect *bbox, uint32_t surface_id,
+                TestClipList *clip_rects, intptr_t release_info,
+                intptr_t image, QXLDrawable *drawable)
+{
+    uint32_t bw = bbox->right - bbox->left;
+    uint32_t bh = bbox->bottom - bbox->top;
+
+    drawable->surface_id = surface_id;
+    drawable->bbox = *bbox;
+
+    test_fill_clip_data (drawable, clip_rects);
+
+    drawable->effect            = QXL_EFFECT_BLEND;
+    test_set_release_info (&drawable->release_info, release_info);
+    drawable->type              = QXL_DRAW_COPY;
+    drawable->surfaces_dest[0]  = -1;
+    drawable->surfaces_dest[1]  = -1;
+    drawable->surfaces_dest[2]  = -1;
+
+    drawable->u.copy.rop_descriptor     = SPICE_ROPD_OP_PUT;
+    drawable->u.copy.src_bitmap         = (intptr_t)image;
+    drawable->u.copy.src_area.top       = 0;
+    drawable->u.copy.src_area.left      = 0;
+    drawable->u.copy.src_area.right     = bw;
+    drawable->u.copy.src_area.bottom    = bh;
+
+    return TRUE;
+}
+TestSpiceUpdate *test_create_update_surface_image (test_qxl_t *qxl,
+                uint32_t src_surface, const QXLRect *bbox, uint32_t image_id,
+                uint32_t surface_id, TestClipList *clip_rects)
+{
+    TestSpiceUpdate *update;
+    QXLImage *image;
+    QXLDrawable *drawable;
+    uint32_t bw, bh;
+
+    bw = bbox->right - bbox->left;
+    bh = bbox->bottom - bbox->top;
+
+    update = calloc (sizeof(*update), 1);
+    drawable = &update->drawable;
+    image = &update->image;
+
+    update->bitmap.destroyable = FALSE;
+
+    if (!make_drawable (bbox, surface_id, clip_rects,
+            (intptr_t)update, (intptr_t) image, drawable) ) {
+        goto drawable_fail;
+    }
+
+    QXL_SET_IMAGE_ID (image, QXL_IMAGE_GROUP_DEVICE, image_id);
+
+    image->descriptor.type      = SPICE_IMAGE_TYPE_SURFACE;
+    image->descriptor.width     = image->bitmap.x = bw;
+    image->descriptor.height    = image->bitmap.y = bh;
+
+    image->surface_image.surface_id = src_surface;
+
+drawable_fail:
+    free(update);
+    return NULL;
+}
+static TestSpiceUpdate *test_create_update_bitmap_image (test_qxl_t *qxl,
                 TestBitmap *bitmap, const QXLRect *bbox, uint32_t image_id,
                 uint32_t surface_id, TestClipList *clip_rects)
 {
@@ -150,42 +215,36 @@ static TestSpiceUpdate *test_create_update_image (test_qxl_t *qxl,
     drawable = &update->drawable;
     image = &update->image;
 
-    drawable->surface_id = surface_id; 
-    drawable->bbox = *bbox;
+    if (!make_drawable (bbox, surface_id, clip_rects,
+            (intptr_t)update, (intptr_t) image, drawable) ) {
+        goto drawable_fail;
+    }
 
-    test_fill_clip_data (drawable, clip_rects); 
-
-    drawable->effect            = QXL_EFFECT_BLEND;
-    test_set_release_info (&drawable->release_info, (intptr_t)update);//same as &update->ext
-    drawable->type              = QXL_DRAW_COPY;
-    drawable->surfaces_dest[0]  = -1;
-    drawable->surfaces_dest[1]  = -1;
-    drawable->surfaces_dest[2]  = -1;
-
-    drawable->u.copy.rop_descriptor     = SPICE_ROPD_OP_PUT;
-    drawable->u.copy.src_bitmap         = (intptr_t)image;
-    drawable->u.copy.src_area.top       = 0;
-    drawable->u.copy.src_area.left      = 0;
-    drawable->u.copy.src_area.right     = bw;
-    drawable->u.copy.src_area.bottom    = bh;
-   
     QXL_SET_IMAGE_ID (image, QXL_IMAGE_GROUP_DEVICE, image_id);
 
+    image->descriptor.type      = SPICE_IMAGE_TYPE_BITMAP;
+    image->descriptor.flags     = QXL_IMAGE_CACHE;
     image->descriptor.width     = image->bitmap.x = bw;
     image->descriptor.height    = image->bitmap.y = bh;
+
     image->bitmap.data          = (intptr_t)bitmap->ptr;
-    image->descriptor.type      = SPICE_IMAGE_TYPE_BITMAP;
     image->bitmap.flags         = QXL_BITMAP_DIRECT | QXL_BITMAP_TOP_DOWN;
     image->bitmap.stride        = bw * 4;
     image->bitmap.palette       = 0;
     image->bitmap.format        = SPICE_BITMAP_FMT_32BIT;
-    image->descriptor.flags     = QXL_IMAGE_CACHE;
-    
+
     update->bitmap              = *bitmap;
 
     set_cmd (&update->ext, QXL_CMD_DRAW, (intptr_t)drawable);
 
     return update;
+
+drawable_fail:
+    free(update);
+    if (bitmap->destroyable) {
+        free (bitmap->ptr);
+    }
+    return NULL;
 }
 
 static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
@@ -200,7 +259,7 @@ static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
     drawable = &update->drawable;
     fill = &drawable->u.fill;
 
-    drawable->surface_id = surface_id; 
+    drawable->surface_id = surface_id;
     drawable->bbox = *bbox;
 
     test_fill_clip_data (drawable, clip_rects);
@@ -224,8 +283,8 @@ static TestSpiceUpdate *test_create_update_fill (test_qxl_t *qxl,
     return update;
 }
 
-static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl, 
-                TestCommandDraw *command, int is_last_call, 
+static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl,
+                TestCommandDraw *command, int is_last_call,
                 uint32_t surface_id, TestClipList *clip_rects)
 {
     TestBitmap bitmap_str;
@@ -237,7 +296,7 @@ static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl,
 
     bw = bbox->right - bbox->left;
     bh = bbox->bottom - bbox->top;
- 
+
     if (command->image_id == 0) {
         command->bitmap.ptr = bitmap_str.ptr = malloc (bw * bh * 4);
         fill_up = TRUE;
@@ -255,7 +314,7 @@ static TestSpiceUpdate *test_create_update_solid (test_qxl_t *qxl,
     }
     bitmap_str.destroyable = is_last_call;
 
-    return test_create_update_image (qxl, &bitmap_str,
+    return test_create_update_bitmap_image (qxl, &bitmap_str,
         bbox, command->image_id, surface_id, clip_rects);
 }
 
@@ -278,7 +337,7 @@ void remove_command (RingItem *item)
     ring_remove (item);
     free (command);
 }
-TestCommand *get_next_command (RingItem *item) 
+TestCommand *get_next_command (RingItem *item)
 {
     if (ring_is_empty (&commands)) {
         return NULL;
@@ -290,14 +349,14 @@ TestCommand *get_next_command (RingItem *item)
     }
     return &command_item->command;
 }
-void free_commands () 
-{    
+void free_commands ()
+{
     RingItem *item, *next;
     Ring* ring = (Ring*)&commands;
     //FIXME something wrong with macros!
-    for (item = ring_get_head(ring),                       
+    for (item = ring_get_head(ring),
          next = (item != NULL) ? ring_next(ring, item) : NULL;
-         item != NULL;                                   
+         item != NULL;
     item = next, next = item != NULL ? ring_next(ring, item) : NULL) {
 //    RING_FOREACH_SAVE(item, next, ring) {
         remove_command (item);
@@ -307,7 +366,7 @@ void free_commands ()
 void create_primary_surface( test_qxl_t* qxl,
                              uint32_t width, uint32_t height )
 {
-    QXLWorker *qxl_worker = qxl->worker;
+//    QXLWorker *qxl_worker = qxl->worker;
     QXLDevSurfaceCreate surface = { 0, };
 
     ASSERT(height <= MAX_HEIGHT);
@@ -331,7 +390,9 @@ void create_primary_surface( test_qxl_t* qxl,
         qxl->height = height;
     }
 
-    qxl_worker->create_primary_surface(qxl_worker, 0, &surface);
+    // Deprecated
+    //qxl_worker->create_primary_surface(qxl_worker, 0, &surface);
+    spice_qxl_create_primary_surface(&qxl->display_sin, 0, &surface);
 }
 
 /*  Produce one command per call
@@ -344,7 +405,7 @@ static void produce_command (test_qxl_t *qxl)
     TestCommandItem *item;
     TestSurfaceCmd *surface_cmd = NULL;
     TestCommand command_container;
-    QXLWorker *qxl_worker = qxl->worker;
+//    QXLWorker *qxl_worker = qxl->worker;
 
     if ( ring_is_empty(&commands) ) {
         qxl->current_command = NULL;
@@ -353,7 +414,7 @@ static void produce_command (test_qxl_t *qxl)
 
     if ( qxl->current_command == NULL ) {       //If no commands in qxl struct
                                                 //get first from commands ring
-        qxl->current_command = ring_get_head (&commands);       
+        qxl->current_command = ring_get_head (&commands);
                                                 //if no commands in ring
         if (qxl->current_command == NULL ) {
             dprint (3, "command ring is empty");
@@ -364,7 +425,7 @@ static void produce_command (test_qxl_t *qxl)
     item = (TestCommandItem *)qxl->current_command;
     command = &item->command;
 
-    if (command->type == COMMAND_CONTROL && 
+    if (command->type == COMMAND_CONTROL &&
         command->control.type == COMMAND_CONTROL_USE_INSTEAD ) {
 
         command->control.cg(command->control.opaque, &command_container);
@@ -385,22 +446,24 @@ static void produce_command (test_qxl_t *qxl)
             .top = 0,
             .bottom = qxl->height,
         };
-        qxl_worker->update_area (qxl_worker, qxl->target_surface, &rect, NULL, 0 ,1);
+        // Deprecated
+        //qxl_worker->update_area (qxl_worker, qxl->target_surface, &rect, NULL, 0 ,1);
+        spice_qxl_update_area (&qxl->display_sin, qxl->target_surface, &rect, NULL, 0 ,1);
         break;
     }
 
     case COMMAND_CREATE_SURFACE:
         dprint (2, "create surface");
-        qxl->target_surface = NUM_SURFACES - 1; 
+        qxl->target_surface = NUM_SURFACES - 1;
         surface_cmd = create_surface ( qxl->target_surface, &command->create_surface.rect,
                                        qxl->secondary_surface.surface );
-        qxl->height = command->create_surface.rect.bottom - 
+        qxl->height = command->create_surface.rect.bottom -
                       command->create_surface.rect.top;
-        qxl->width = command->create_surface.rect.right - 
+        qxl->width = command->create_surface.rect.right -
                      command->create_surface.rect.left;
         qxl->has_secondary = TRUE;
         break;
-    
+
     case COMMAND_DESTROY_SURFACE:
         dprint (2, "destroy surface");
         qxl->has_secondary = FALSE;
@@ -418,9 +481,11 @@ static void produce_command (test_qxl_t *qxl)
 
     case COMMAND_DESTROY_PRIMARY:
         dprint (2, "destroy primary");
-        qxl_worker->destroy_primary_surface(qxl_worker, 0);
+        // Deprecated
+        //qxl_worker->destroy_primary_surface(qxl_worker, 0);
+        spice_qxl_destroy_primary_surface(&qxl->display_sin, 0);
         break;
-    
+
     case COMMAND_DRAW: {
         TestSpiceUpdate *update = NULL;
         if (command->draw.cg) {
@@ -432,32 +497,34 @@ static void produce_command (test_qxl_t *qxl)
             if (command->draw.image_id == 0) {
                 command->draw.image_id = image_unique++;
             }
-            update = test_create_update_image (qxl, 
-                &command->draw.bitmap, &command->draw.rect, 
-                command->draw.image_id, 0, &command->draw.clip_rects );
+            update = test_create_update_bitmap_image (qxl,
+                &command->draw.bitmap, &command->draw.rect,
+                command->draw.image_id, command->draw.dst_surface,
+                &command->draw.clip_rects );
             break;
         }
         case COMMAND_DRAW_SOLID: {
             dprint (2, "draw solid");
             update = test_create_update_solid (qxl,
-                &command->draw,(command->times == 1), 0,
-                &command->draw.clip_rects);
+                &command->draw,(command->times == 1),
+                command->draw.dst_surface, &command->draw.clip_rects);
             break;
         }
         case COMMAND_DRAW_FILL: {
             dprint (2, "fill surface");
             update = test_create_update_fill (qxl,
-                command->draw.color, &command->draw.rect, 0,
-                &command->draw.clip_rects);
+                command->draw.color, &command->draw.rect,
+                command->draw.dst_surface, &command->draw.clip_rects);
             break;
         }
         case COMMAND_DRAW_SURFACE: {
-            dprint (2, "draw surface (NOT IMPLEMENED)");   
+            dprint (2, "draw surface (NOT IMPLEMENED)");
             //TODO: implement
             break;
         }
         default:
-            dprint (2, "unknown draw command with type_code %d", command->draw.type);
+            dprint (2, "unknown draw command with type_code %d",
+                command->draw.type);
             break;
         }
         if (update != NULL ) {
@@ -473,7 +540,7 @@ static void produce_command (test_qxl_t *qxl)
             command->control.cg(command->control.opaque, &local_container);
             add_command(&local_container);
             break;
-        
+
         case COMMAND_CONTROL_REMOVE_PREV:
             remove_command(item->link.prev);
             break;
@@ -484,9 +551,10 @@ static void produce_command (test_qxl_t *qxl)
             remove_command(command->control.pos);
             break;
         case COMMAND_CONTROL_IGNORE:
+        default:
             dprint(2, "ignore");
             break;
-        }   
+        }
         break;
     }
     case COMMAND_SWITCH_SURFACE:
@@ -505,13 +573,13 @@ static void produce_command (test_qxl_t *qxl)
         qxl->push_command (qxl, &surface_cmd->ext);
     }
 
-    qxl->current_command = ring_next (&commands, &item->link); 
+    qxl->current_command = ring_next (&commands, &item->link);
     if (command->times > 0) {
         if ( --command->times <= 0) {
             if (qxl->current_command == &item->link) {
                 qxl->current_command = NULL;
             }
-            remove_command (&item->link); 
+            remove_command (&item->link);
         }
     }
 }
@@ -521,6 +589,7 @@ void draw_command_init (TestCommand *command) {
     command->draw.image_id      = 0;
     command->draw.cg            = NULL;
     command->draw.opaque        = NULL;
+    command->draw.dst_surface   = 0;
     command->draw.bitmap.ptr         = NULL;
     command->draw.bitmap.destroyable = FALSE;
     command->draw.clip_rects.num_rects   = 0;

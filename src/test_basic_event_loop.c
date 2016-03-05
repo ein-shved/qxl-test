@@ -108,7 +108,7 @@ static void watch_remove(SpiceWatch *watch)
 
 static void channel_event(int event, SpiceChannelEventInfo *info)
 {
-    DPRINTF("channel event con, type, id, event: %ld, %d, %d, %d",
+    DPRINTF("channel event con, type, id, event: %d, %d, %d, %d",
             info->connection_id, info->type, info->id, event);
 }
 
@@ -226,7 +226,7 @@ void basic_event_loop_mainloop(void)
             printf("error in select - exiting\n");
             abort();
         }
-        if (retval) {
+        if (retval){
             RING_FOREACH_SAFE(link, next, &watches) {
                 watch = SPICE_CONTAINEROF(link, SpiceWatch, link);
                 if (!watch->removed && (watch->event_mask & SPICE_WATCH_EVENT_READ)

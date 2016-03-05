@@ -58,8 +58,14 @@ typedef struct TestCommandDraw {
                          */
     command_gen cg;
     void *opaque;
-    uint32_t color;
-    TestBitmap bitmap;
+    uint32_t dst_surface;
+    union {
+        struct { //for fill and bitmap
+            uint32_t color;
+            TestBitmap bitmap;
+        };
+        uint32_t src_surface; //for surface
+    };
     TestClipList clip_rects;
 } TestCommandDraw;
 typedef enum TestCommandControlType{

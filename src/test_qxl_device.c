@@ -1,3 +1,6 @@
+#include <string.h>
+#include <stdlib.h>
+
 #include <spice.h>
 #include <assert.h>
 
@@ -33,7 +36,7 @@ static QXLRect global_rect = {
 
 static void fill_bitmap (uint8_t *bitmap) {
     uint32_t *dst = (uint32_t *) bitmap;
-    int r=256,g=256,b=256;
+    int r=256;
     int stride = 8;
     int i;
 
@@ -54,7 +57,6 @@ static void fill_bitmap (uint8_t *bitmap) {
 
 static void cg_1 (void *opaque, TestCommand *command)
 {
-    test_qxl_t *qxl = (test_qxl_t *)opaque;
     QXLRect rect = {
         .left   = obj_x - obj_width/2,
         .right  = obj_x + obj_width/2,
@@ -73,7 +75,6 @@ static void cg_1 (void *opaque, TestCommand *command)
 }
 static void cg_2 (void *opaque, TestCommand *command)
 {
-    test_qxl_t *qxl = (test_qxl_t *)opaque;
     QXLRect rect = {
         .left   = obj_x - OBJ_WIDTH/2,
         .right  = obj_x + OBJ_WIDTH/2,
@@ -82,7 +83,7 @@ static void cg_2 (void *opaque, TestCommand *command)
     };
 
     command->draw.rect = rect;
-    
+
     obj_y += STRIDE;
     if (obj_y > PR_HEIGHT+OBJ_HEIGHT/2) {
         obj_y = -OBJ_HEIGHT/2;
@@ -91,7 +92,6 @@ static void cg_2 (void *opaque, TestCommand *command)
 
 static void cg_clip_3 (void *opaque, TestCommand *command)
 {
-    test_qxl_t *qxl = (test_qxl_t *)opaque;
     QXLRect rect = {
         .left   = obj_x - OBJ_WIDTH/2,
         .right  = obj_x + OBJ_WIDTH/2,
@@ -114,8 +114,10 @@ static void do_wakeup (void *opaque)
 
     test_qxl_t *qxl = opaque;
     qxl->produce_command(qxl);
-    qxl->worker->wakeup(qxl->worker);
+    // Depricated
+    //qxl->worker->wakeup(qxl->worker);
     qxl->core->timer_start (qxl->wakeup_timer, 1);
+    spice_qxl_wakeup(&qxl->display_sin);
 }
 
 static test_qxl_t *new_test ( SpiceCoreInterface *core)
@@ -131,7 +133,7 @@ static test_qxl_t *new_test ( SpiceCoreInterface *core)
 
     wakeup_timer = core->timer_add(do_wakeup, qxl);
     qxl->wakeup_timer=wakeup_timer;
-    
+
     return qxl;
 }
 
@@ -144,12 +146,12 @@ struct TestServerOptsStr {
 };
 typedef struct TestServerOptsStr TestServerOpts, *TestServerOptsPtr;
 
-static void test_qxl_spice_server_new ( test_qxl_t *qxl, 
+static void test_qxl_spice_server_new ( test_qxl_t *qxl,
                                         const TestServerOptsPtr ops)
 {
     //Init spice server
     qxl->spice_server = spice_server_new();
-    
+
     spice_server_set_addr ( qxl->spice_server,
                             ops->addr, ops->flags );
     spice_server_set_port ( qxl->spice_server,
@@ -158,10 +160,10 @@ static void test_qxl_spice_server_new ( test_qxl_t *qxl,
         spice_server_set_noauth ( qxl->spice_server );
     }
 
-    dprint (1, "spice server created. Addres: '%s' Port: '%d'", 
+    dprint (1, "spice server created. Addres: '%s' Port: '%d'",
         ops->addr, ops->port);
 
-    //TODO set another spice server options here   
+    //TODO set another spice server options here
 
     spice_server_init (qxl->spice_server, qxl->core);
 
@@ -186,12 +188,33 @@ static void fill_commands(test_qxl_t *qxl)
         .bottom = PR_HEIGHT,
     };
     QXLRect rect = {
-        .left = OBJ_POS_X - OBJ_WIDTH/2,
-        .right = OBJ_POS_X + OBJ_WIDTH/2,
-        .top = OBJ_POS_Y - OBJ_HEIGHT/2,
-        .bottom = OBJ_POS_Y + OBJ_HEIGHT/2,
+        .left = 0 - OBJ_WIDTH/2,
+        .right = 0 + OBJ_WIDTH/2,
+        .top = 0 - OBJ_HEIGHT/2,
+        .bottom = 0 + OBJ_HEIGHT/2,
     };
-    
+
+    cmd.type    = COMMAND_CREATE_SURFACE;
+    cmd.create_surface.rect = prim_rect;
+    cmd.times   = 1;
+    add_command(&cmd);
+
+    draw_command_init (&cmd);
+    cmd.draw.type           = COMMAND_DRAW_FILL;
+    cmd.draw.rect           = prim_rect;
+    cmd.draw.color          = COLOR_RGB (255,255,255);
+    cmd.draw.dst_surface    = 1;
+    cmd.times               = 0;
+    add_command(&cmd);
+
+    draw_command_init (&cmd);
+    cmd.draw.type           = COMMAND_DRAW_SURFACE;
+    cmd.draw.src_surface    = 1;
+    cmd.draw.dst_surface    = 0;
+    cmd.times               = 0;
+    cmd.draw.rect           = rect;
+    add_command(&cmd);
+
     cmd.type    = COMMAND_DESTROY_PRIMARY;
     cmd.times   = 1;
     add_command(&cmd);
@@ -223,7 +246,7 @@ static void fill_commands(test_qxl_t *qxl)
     draw_command_init (&cmd);
     cmd.draw.type   = COMMAND_DRAW_SOLID;
     cmd.draw.rect   = rect;
-    cmd.draw.color  = COLOR_RGB(0,0,0); 
+    cmd.draw.color  = COLOR_RGB(0,0,0);
     cmd.draw.cg     = cg_2;
     cmd.draw.opaque = qxl;
     cmd.times       = 0;
@@ -232,13 +255,13 @@ static void fill_commands(test_qxl_t *qxl)
     cmd.type    = COMMAND_UPDATE;
     cmd.times   = 0;
     add_command (&cmd);
-    
+
     cmd.type = COMMAND_SLEEP;
     cmd.sleep.secs = 1;
     cmd.times = 0;
     //add_command(&cmd);
 }
-int parse_args ( int argc, const char *argv[], TestServerOpts *ops ) {
+int parse_args(int argc, char *argv[], TestServerOpts *ops ) {
     int i;
     int ret = 0;
     for (i=1; i < argc; ++i) {
@@ -247,10 +270,10 @@ int parse_args ( int argc, const char *argv[], TestServerOpts *ops ) {
                 ret=-1;
                 goto port_error;
             }
-            const char *endptr = argv[++i];
+            char *endptr = argv[++i];
             ops->port = strtoul(argv[i], &endptr, 0);
             if (*endptr != '\0') {
-                --i; 
+                --i;
                 ret=-1;
                 goto port_error;
             }
@@ -281,10 +304,10 @@ port_error:
     return ret;
 addr_error:
     fprintf (stderr, "Need addr after '%s' option\n", argv[i] );
-    return ret;    
+    return ret;
 }
 
-int main (int argc, const char *argv[])
+int main (int argc, char *argv[])
 {
     test_qxl_t *qxl;
     SpiceCoreInterface *core;
@@ -297,7 +320,7 @@ int main (int argc, const char *argv[])
         .port = port,
         .no_auth = TRUE,
     };
-    
+
     ret = parse_args (argc, argv, &ops);
 
     switch (ret){
@@ -321,10 +344,10 @@ int main (int argc, const char *argv[])
 
     fill_commands(qxl);
 
+    //Deprecated
     //Launch worker
-    qxl->worker->start (qxl->worker);
-    dprint (3, "worker launched");
-    qxl->worker_running = TRUE;
+    //qxl->worker->start (qxl->worker);
+    //dprint (3, "worker launched");
 
     basic_event_loop_mainloop();
     free_commands();

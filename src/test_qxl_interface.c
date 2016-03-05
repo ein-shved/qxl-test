@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "test_qxl_device.h"
 #include "common/ring.h"
@@ -26,7 +27,7 @@ static struct {
     QXLCommandExt *vector [MAX_COMMAND_NUM];
     int start;
     int end;
-} commands = { 
+} commands = {
     .start = 0,
     .end = 0,
 };
@@ -41,7 +42,7 @@ static int push_command (test_qxl_t *qxl, QXLCommandExt *cmd)
     int count;
 
     ASSERT_COMMANDS;
-    
+
     while ( (count  = commands.end - commands.start) >= MAX_COMMAND_NUM) {
         //may be decremented from worker thread.
         if (i >= MAX_WAIT_ITERATIONS) {
@@ -65,34 +66,38 @@ static void test_interface_attache_worker (QXLInstance *sin, QXLWorker *qxl_work
         dprint(1, "ignored");
         return;
     }
-    qxl_worker->add_memslot(qxl_worker, &slot);
-
     dprint(3, "called");
     qxl->worker = qxl_worker;
+    // Deprecated
+    //qxl_worker->add_memslot(qxl_worker, &slot);
+    spice_qxl_add_memslot(&qxl->display_sin, &slot);
+
     create_primary_surface(qxl, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    spice_server_vm_start(qxl->spice_server);
+    qxl->worker_running = TRUE;
 }
 static void test_interface_set_compression_level (QXLInstance *sin, int level)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     //FIXME implement
 }
 static void test_interface_set_mm_time(QXLInstance *sin, uint32_t mm_time)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
 
-    //FIXME implement 
+    //FIXME implement
 }
 static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
-   
+
     memset (info,0,sizeof(*info));
 
     info->num_memslots = NUM_MEMSLOTS;
@@ -103,13 +108,13 @@ static void test_interface_get_init_info(QXLInstance *sin, QXLDevInitInfo *info)
 }
 static int test_interface_get_command(QXLInstance *sin, struct QXLCommandExt *ext)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
     int count = commands.end - commands.start;
 
     memset (ext,0,sizeof(*ext));
 
     dprint(3, "called");
-    
+
     if (count > 0) {
         *ext = *commands.vector[commands.start];
         ++commands.start;
@@ -129,7 +134,7 @@ static int test_interface_req_cmd_notification(QXLInstance *sin)
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     qxl->core->timer_start (qxl->wakeup_timer, 10);
 
     /* This and req_cursor_notification needed for
@@ -142,9 +147,9 @@ static void test_interface_release_resource(QXLInstance *sin,
 {
     test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
     QXLCommandExt *ext;
-        
+
     dprint(3, "called");
- 
+
     assert (info.group_id == MEMSLOT_GROUP);
     ext = (QXLCommandExt*)(unsigned long)info.info->id;
 
@@ -152,20 +157,20 @@ static void test_interface_release_resource(QXLInstance *sin,
 }
 static int test_interface_get_cursor_command(QXLInstance *sin, struct QXLCommandExt *ext)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     //FIXME implemet
 
     return FALSE;
 }
 static int test_interface_req_cursor_notification(QXLInstance *sin)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     //FIXME implemet
 
     /* This and req_cmd_notification needed for
@@ -175,19 +180,19 @@ static int test_interface_req_cursor_notification(QXLInstance *sin)
 }
 static void test_interface_notify_update(QXLInstance *sin, uint32_t update_id)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     //FIXME implemet
 
 }
 static int test_interface_flush_resources(QXLInstance *sin)
 {
-    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
+//    test_qxl_t *qxl = container_of(sin, test_qxl_t, display_sin);
 
     dprint(3, "called");
- 
+
     //FIXME implemet
 
     return 0;
@@ -217,5 +222,5 @@ void test_init_qxl_interface (test_qxl_t *qxl)
     qxl->display_sin.base.sif = &test_qxl_interface.base;
     qxl->display_sin.id = 0;
     qxl->display_sin.st = (struct QXLState*)qxl;
-    qxl->push_command = push_command;    
+    qxl->push_command = push_command;
 }
